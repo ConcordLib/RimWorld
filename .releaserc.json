@@ -1,0 +1,23 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    "@semantic-release/github",
+    ["semantic-release-steam", {
+      "appId": "294100",
+      "branchTargets": { "main": "stable" },
+      "mods": [
+        {
+          "name": "Concord",
+          "path": ".",
+          "workshopIds": { "stable": "REPLACE_WITH_PUBLISHEDFILEID" },
+          "title": "Concord",
+          "tags": ["Mod", "1.5", "1.6"],
+          "visibility": 0
+        }
+      ]
+    }]
+  ]
+}

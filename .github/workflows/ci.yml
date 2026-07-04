@@ -81,3 +81,97 @@ jobs:
           RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
           TESTDLL=$(find Source/ConcordRimWorld.Tests/bin/Release -name ConcordRimWorld.Tests.dll | head -1)
           mono "$RUNNER" "$TESTDLL"
+
+  release:
+    name: Release
+    needs: build-and-test
+    if: github.event_name == 'push' || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Synthetic bump for Core release
+        if: github.event_name == 'repository_dispatch'
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
+          git push origin HEAD:main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Stage RimWorld reference image
+        id: game
+        uses: cryptiklemur/steam-game-image-action@v1
+        with:
+          app-id: '294100'
+          branch: public
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          image: ghcr.io/concordlib/rimworld-game
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          runnable: 'false'
+
+      - name: Extract game DLLs from the image
+        run: |
+          set -euo pipefail
+          IMG="${{ steps.game.outputs.image-ref }}"
+          docker create --name rwgame "$IMG"
+          mkdir -p /opt/rimworld
+          docker cp rwgame:/game/. /opt/rimworld/
+          docker rm -f rwgame
+          test -n "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)" || { echo "Assembly-CSharp.dll not found under /opt/rimworld after extract" >&2; exit 1; }
+
+      - name: Build the mod
+        run: |
+          set -euo pipefail
+          DLLDIR=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")
+          dotnet build Concord.RimWorld.slnx -c Release -p:RimWorldManaged="$DLLDIR"
+
+      - name: Stage the shipped runtime dll
+        run: |
+          set -euo pipefail
+          RUNTIME=$(find ~/.nuget/packages/concord.runtime -path '*netstandard2.0/Concord.dll' | sort -V | tail -1)
+          cp "$RUNTIME" Current/Assemblies/0Concord.dll
+
+      - name: Install semantic-release
+        run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
+
+      - name: Set up SteamCMD
+        uses: buildalon/setup-steamcmd@v1
+
+      - name: Restore Steam config
+        env:
+          STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+        run: |
+          mkdir -p "$STEAM_DIR/config"
+          printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
+          echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
+          STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
+        run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
