@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="Source/ConcordRimWorld/ConcordRimWorld.csproj" />
+  <Project Path="Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj" />
 </Solution>
