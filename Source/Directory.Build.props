@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <!-- CI overrides this to the staged steam-game-image dir; locally it points at the install. -->
+    <RimWorldManaged Condition="'$(RimWorldManaged)' == ''">/mnt/games/SteamLibrary/steamapps/common/RimWorld/RimWorldLinux_Data/Managed</RimWorldManaged>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+</Project>
