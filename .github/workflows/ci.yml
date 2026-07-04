@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [core-released]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test (RW ${{ matrix.rw }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rw: '1.6', branch: 'public' }
+          - { rw: '1.5', branch: '1.5', experimental: true }
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage RimWorld reference image
+        id: game
+        uses: cryptiklemur/steam-game-image-action@v1
+        with:
+          app-id: '294100'
+          branch: ${{ matrix.branch }}
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+          image: ghcr.io/concordlib/rimworld-game
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          runnable: 'false'
+
+      - name: Extract game DLLs from the image
+        run: |
+          set -euo pipefail
+          IMG="${{ steps.game.outputs.image-ref }}"
+          docker create --name rwgame "$IMG"
+          mkdir -p /opt/rimworld
+          docker cp rwgame:/game/. /opt/rimworld/
+          docker rm -f rwgame
+          test -n "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)" || { echo "Assembly-CSharp.dll not found under /opt/rimworld after extract" >&2; exit 1; }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Install mono
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-complete
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          DLLDIR=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")
+          dotnet build Concord.RimWorld.slnx -c Release -p:RimWorldManaged="$DLLDIR"
+
+      - name: Test (net472 under mono)
+        run: |
+          set -euo pipefail
+          RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
+          TESTDLL=$(find Source/ConcordRimWorld.Tests/bin/Release -name ConcordRimWorld.Tests.dll | head -1)
+          mono "$RUNNER" "$TESTDLL"
