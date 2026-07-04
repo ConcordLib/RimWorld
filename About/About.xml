@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Concord</name>
+  <author>cryptiklemur</author>
+  <packageId>concordlib.concord</packageId>
+  <url>https://github.com/ConcordLib/RimWorld</url>
+  <supportedVersions>
+    <li>1.5</li>
+    <li>1.6</li>
+  </supportedVersions>
+  <loadBefore>
+    <li>Ludeon.RimWorld</li>
+  </loadBefore>
+  <description>Concord is a runtime patching library for RimWorld mods: author [Patch]/[Inject] templates with attached data and save persistence. Load this before every mod that depends on it.</description>
+</ModMetaData>
