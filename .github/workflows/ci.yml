@@ -24,7 +24,7 @@ jobs:
       matrix:
         include:
           - { rw: '1.6', branch: 'public' }
-          - { rw: '1.5', branch: '1.5', experimental: true }
+          - { rw: '1.5', branch: 'version-1.5', experimental: true }
     continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - name: Checkout
@@ -45,7 +45,10 @@ jobs:
       - name: Extract game DLLs from the image
         run: |
           set -euo pipefail
+          # image-ref is empty when the action skipped an unchanged push; the image still
+          # exists at the :latest tag it always publishes, so fall back to that.
           IMG="${{ steps.game.outputs.image-ref }}"
+          [ -n "$IMG" ] || IMG="ghcr.io/concordlib/rimworld-game:latest"
           docker create --name rwgame "$IMG"
           mkdir -p /opt/rimworld
           docker cp rwgame:/game/. /opt/rimworld/
@@ -135,7 +138,10 @@ jobs:
       - name: Extract game DLLs from the image
         run: |
           set -euo pipefail
+          # image-ref is empty when the action skipped an unchanged push; the image still
+          # exists at the :latest tag it always publishes, so fall back to that.
           IMG="${{ steps.game.outputs.image-ref }}"
+          [ -n "$IMG" ] || IMG="ghcr.io/concordlib/rimworld-game:latest"
           docker create --name rwgame "$IMG"
           mkdir -p /opt/rimworld
           docker cp rwgame:/game/. /opt/rimworld/
