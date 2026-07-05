@@ -12,9 +12,9 @@
         {
           "name": "Concord",
           "path": ".",
-          "workshopIds": { "stable": "REPLACE_WITH_PUBLISHEDFILEID" },
+          "workshopIds": { "stable": "3758333473" },
           "title": "Concord",
-          "tags": ["Mod", "1.5", "1.6"],
+          "tags": ["Mod", "1.6"],
           "visibility": 0
         }
       ]
