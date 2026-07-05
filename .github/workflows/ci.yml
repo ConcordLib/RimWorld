@@ -36,7 +36,7 @@ jobs:
         with:
           app-id: '294100'
           branch: ${{ matrix.branch }}
-          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-username: ${{ vars.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           image: ghcr.io/concordlib/rimworld-game
           registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -126,7 +126,7 @@ jobs:
         with:
           app-id: '294100'
           branch: public
-          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-username: ${{ vars.STEAM_USERNAME }}
           steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
           image: ghcr.io/concordlib/rimworld-game
           registry-password: ${{ secrets.GITHUB_TOKEN }}
@@ -172,7 +172,7 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
           STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
           STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
         run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
