@@ -7,7 +7,7 @@ using Verse;
 
 namespace Concord.RimWorld;
 
-[Patch]
+[Patch(typeof(DirectXmlLoader))]
 public static class DefFromNodePatch {
     [Inject(At.Around, nameof(DirectXmlLoader.DefFromNode))]
     public static Def WrapDefFromNode(XmlNode node, LoadableXmlAsset loadingAsset, ControlHandle<Def> ch) {
