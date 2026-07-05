@@ -24,8 +24,7 @@ jobs:
       matrix:
         include:
           - { rw: '1.6', branch: 'public' }
-          # 1.5 support is dropped until a 1.5 assembly + LoadFolders folder ship; re-add:
-          # - { rw: '1.5', branch: 'version-1.5', experimental: true }
+          - { rw: '1.5', branch: 'version-1.5' }
     continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - name: Checkout
