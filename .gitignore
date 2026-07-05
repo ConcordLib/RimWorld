@@ -4,3 +4,6 @@ obj/
 Current/Assemblies/
 1.5/Assemblies/
 TestMod/Assemblies/
+
+# local in-game verification notes (kept out of git)
+VERIFICATION.md
