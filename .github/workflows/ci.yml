@@ -158,7 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           RUNTIME=$(find ~/.nuget/packages/concord.runtime -path '*net472/Concord.dll' | sort -V | tail -1)
-          test -n "$RUNTIME" || { echo "No net472 Concord.Runtime in the NuGet cache — the pinned Concord.Runtime version predates lib/net472. Bump the pin in Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj to a release that ships it." >&2; exit 1; }
+          test -n "$RUNTIME" || { echo "No net472 Concord.Runtime in the NuGet cache: the pinned Concord.Runtime version predates lib/net472. Bump the pin in Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj to a release that ships it." >&2; exit 1; }
           cp "$RUNTIME" Current/Assemblies/0Concord.dll
 
       - name: Install semantic-release
