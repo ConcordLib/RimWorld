@@ -7,7 +7,7 @@ namespace Concord.RimWorld;
 
 [Patch]
 public abstract class ThingExposePatch : ThingWithComps {
-    [Inject(At.Tail, nameof(ExposeData))]
+    [Inject(At.Return, nameof(ExposeData))]
     public void ScribeAttachedProperties(ControlHandle ch) {
         ThingWithComps self = this;
         if (self == null) {
