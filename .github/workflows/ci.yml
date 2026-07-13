@@ -30,6 +30,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/miniconda /usr/local/share/powershell
+          sudo docker image prune -af
+          df -h /
+
       - name: Stage RimWorld reference image
         id: game
         uses: cryptiklemur/steam-game-image-action@v1
@@ -101,6 +107,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/miniconda /usr/local/share/powershell
+          sudo docker image prune -af
+          df -h /
 
       - name: Synthetic bump for Core release
         if: github.event_name == 'repository_dispatch'
