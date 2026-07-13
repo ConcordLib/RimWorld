@@ -12,6 +12,3 @@ Mods that depend on Concord will not work without it.
 - Attach save-persisted data to things without touching their classes
 - Add custom XML fields to defs, lifted before vanilla parsing
 - The Concord runtime ships as 0Concord.dll and loads before your mod
-
-Docs: https://concordlib.dev
-Source and issues: https://github.com/ConcordLib/RimWorld
