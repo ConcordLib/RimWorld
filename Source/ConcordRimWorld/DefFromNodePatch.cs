@@ -10,9 +10,9 @@ namespace Concord.RimWorld;
 [Patch(typeof(DirectXmlLoader))]
 public static class DefFromNodePatch {
     [Inject(At.Around, nameof(DirectXmlLoader.DefFromNode))]
-    public static Def WrapDefFromNode(XmlNode node, LoadableXmlAsset loadingAsset, ControlHandle<Def> ch) {
+    public static Def WrapDefFromNode(XmlNode node, LoadableXmlAsset loadingAsset, Operation<XmlNode, LoadableXmlAsset, Def> original) {
         List<KeyValuePair<PropertyEntry, object>> lifted = Strip(node);
-        Def result = DirectXmlLoader.DefFromNode(node, loadingAsset);
+        Def result = original.Invoke(node, loadingAsset);
         Apply(result, lifted);
         return result;
     }
