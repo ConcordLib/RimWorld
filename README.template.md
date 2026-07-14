@@ -10,8 +10,61 @@ Mods that depend on Concord will not work without it.
 
 - Author patches as [Patch] classes that extend the target type, with [Inject] methods at Head, Tail, or Around positions
 - Attach save-persisted data to things without touching their classes
-- Add custom XML fields to defs, lifted before vanilla parsing
+- Add custom XML fields to defs, and Concord lifts them before vanilla parsing
 - The Concord runtime ships as 0Concord.dll and loads before your mod
+
+### Examples
+
+A patch extends the type it patches, so target members are in scope. Change a return value by injecting at the tail:
+
+```csharp
+[Patch]
+abstract class ThingInspectPatch : Thing {
+    [Inject(At.Tail, nameof(GetInspectString))]
+    void AfterGetInspectString(ControlHandle<string> ch) {
+        ch.ReturnValue += "\nConcord was here.";
+    }
+}
+```
+
+Cancel a method before it runs. No more zzzt:
+
+```csharp
+[Patch]
+abstract class ShortCircuitPatch : IncidentWorker_ShortCircuit {
+    [Inject(At.Head, nameof(TryExecuteWorker))]
+    void BeforeTryExecuteWorker(ControlHandle<bool> ch) {
+        ch.ReturnValue = false;
+        ch.Cancel();
+    }
+}
+```
+
+TryExecuteWorker is protected. That works because the patch extends the target type, which puts protected members and nameof in reach.
+
+Give every thing its own damage tally:
+
+```csharp
+[Patch]
+abstract class DamageTallyPatch : Thing {
+    static readonly AttachedField<Thing, float> TotalDamage = new();
+
+    [Inject(At.Tail, nameof(TakeDamage))]
+    void AfterTakeDamage(DamageInfo dinfo) {
+        TotalDamage.Set(this, TotalDamage.Get(this) + dinfo.Amount);
+    }
+}
+```
+
+Apply your patches once, from your mod's constructor:
+
+```csharp
+public class MyMod : Mod {
+    public MyMod(ModContentPack content) : base(content) {
+        Concord.Patcher.Apply(typeof(MyMod).Assembly);
+    }
+}
+```
 
 Docs: https://concordlib.dev
 Source and issues: https://github.com/ConcordLib/RimWorld
