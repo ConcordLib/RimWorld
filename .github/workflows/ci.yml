@@ -66,6 +66,16 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Apply dispatched Core version
+        if: github.event_name == 'repository_dispatch'
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION="${CORE_VERSION#v}"
+          test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
+          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+
       - name: Cache NuGet
         uses: actions/cache@v4
         with:
