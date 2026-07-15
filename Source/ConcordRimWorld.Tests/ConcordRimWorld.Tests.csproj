@@ -12,7 +12,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageReference Include="xunit.runner.console" Version="2.9.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Concord.Runtime" Version="0.5.0" />
+    <PackageReference Include="Concord.Runtime" Version="0.7.1" />
   </ItemGroup>
 
   <ItemGroup>
