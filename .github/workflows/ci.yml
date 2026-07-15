@@ -51,10 +51,10 @@ jobs:
       - name: Extract game DLLs from the image
         run: |
           set -euo pipefail
-          # image-ref is empty when the action skipped an unchanged push; the image still
-          # exists at the :latest tag it always publishes, so fall back to that.
+          # The action always sets image-ref: the version tag when it built, the
+          # branch-scoped latest-<branch> tag when the build-id gate skipped.
           IMG="${{ steps.game.outputs.image-ref }}"
-          [ -n "$IMG" ] || IMG="ghcr.io/concordlib/rimworld-game:latest"
+          test -n "$IMG" || { echo "steam-game-image-action returned no image-ref" >&2; exit 1; }
           docker create --name rwgame "$IMG"
           mkdir -p /opt/rimworld
           docker cp rwgame:/game/. /opt/rimworld/
@@ -150,10 +150,10 @@ jobs:
       - name: Extract game DLLs from the image
         run: |
           set -euo pipefail
-          # image-ref is empty when the action skipped an unchanged push; the image still
-          # exists at the :latest tag it always publishes, so fall back to that.
+          # The action always sets image-ref: the version tag when it built, the
+          # branch-scoped latest-<branch> tag when the build-id gate skipped.
           IMG="${{ steps.game.outputs.image-ref }}"
-          [ -n "$IMG" ] || IMG="ghcr.io/concordlib/rimworld-game:latest"
+          test -n "$IMG" || { echo "steam-game-image-action returned no image-ref" >&2; exit 1; }
           docker create --name rwgame "$IMG"
           mkdir -p /opt/rimworld
           docker cp rwgame:/game/. /opt/rimworld/
