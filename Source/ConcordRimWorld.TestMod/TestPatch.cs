@@ -8,6 +8,7 @@ public abstract class TestPatch : Verse.Root {
     private static bool logged;
 
     [Inject(At.Head, nameof(Verse.Root.Update))]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Critical Code Smell", "S2696", Justification = "This injected instance patch deliberately sets a static once-flag so the probe logs only on the first tick.")]
     public void ProbeUpdate(ControlHandle ch) {
         if (logged) {
             return;
