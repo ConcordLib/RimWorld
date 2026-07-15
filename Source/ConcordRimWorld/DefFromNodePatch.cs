@@ -17,6 +17,7 @@ public static class DefFromNodePatch {
         return result;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S1168", Justification = "null is the deliberate 'nothing to lift' sentinel on this hot XML-load path; Apply null-checks it, so returning an empty list would only add per-def allocation.")]
     private static List<KeyValuePair<PropertyEntry, object>> Strip(XmlNode node) {
         PropertyRegistry registry = RimWorldRuntime.Registry;
         if (registry == null || registry.IsEmpty || node == null) {

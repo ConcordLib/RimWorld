@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Concord.AttachedData;
 
 namespace Concord.RimWorld;
@@ -34,14 +35,7 @@ public sealed class PropertyRegistry {
             return cached;
         }
 
-        List<PropertyEntry> result = [];
-        foreach (PropertyEntry entry in entries) {
-            if (entry.BaseType.IsAssignableFrom(type)) {
-                result.Add(entry);
-            }
-        }
-
-        PropertyEntry[] array = result.ToArray();
+        PropertyEntry[] array = entries.Where(entry => entry.BaseType.IsAssignableFrom(type)).ToArray();
         byType[type] = array;
         return array;
     }

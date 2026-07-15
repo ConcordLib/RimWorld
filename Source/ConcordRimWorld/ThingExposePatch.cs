@@ -9,19 +9,14 @@ namespace Concord.RimWorld;
 public abstract class ThingExposePatch : ThingWithComps {
     [Inject(At.Return, nameof(ExposeData))]
     public void ScribeAttachedProperties(ControlHandle ch) {
-        ThingWithComps self = this;
-        if (self == null) {
-            return;
-        }
-
         PropertyRegistry registry = RimWorldRuntime.Registry;
         if (registry == null || registry.IsEmpty) {
             return;
         }
 
-        IReadOnlyList<PropertyEntry> entries = registry.ForBaseType(self.GetType());
+        IReadOnlyList<PropertyEntry> entries = registry.ForBaseType(GetType());
         foreach (PropertyEntry entry in entries) {
-            ScribeOne(self, entry);
+            ScribeOne(this, entry);
         }
     }
 
