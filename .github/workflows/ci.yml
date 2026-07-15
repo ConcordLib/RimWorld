@@ -38,7 +38,7 @@ jobs:
 
       - name: Stage RimWorld reference image
         id: game
-        uses: cryptiklemur/steam-game-image-action@v1
+        uses: cryptiklemur/steam-game-image-action@19937bfbdc67d5f6f12135e4b27d61bf790d8133 # v1
         with:
           app-id: '294100'
           branch: ${{ matrix.branch }}
@@ -152,7 +152,7 @@ jobs:
 
       - name: Stage RimWorld reference image
         id: game
-        uses: cryptiklemur/steam-game-image-action@v1
+        uses: cryptiklemur/steam-game-image-action@19937bfbdc67d5f6f12135e4b27d61bf790d8133 # v1
         with:
           app-id: '294100'
           branch: public
@@ -192,7 +192,7 @@ jobs:
         run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
 
       - name: Set up SteamCMD
-        uses: buildalon/setup-steamcmd@v1
+        uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
 
       - name: Restore Steam config
         env:
