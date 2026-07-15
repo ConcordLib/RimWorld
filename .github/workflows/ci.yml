@@ -106,7 +106,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
+          # The repository_dispatch path commits and pushes the Core package-version bump.
+          persist-credentials: true
 
       - name: Free runner disk space
         run: |
