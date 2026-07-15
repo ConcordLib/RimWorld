@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Verse;
 
@@ -38,14 +39,9 @@ public class ConcordMod : Mod {
             return false;
         }
 
-        bool referencesFacade = false;
-        foreach (AssemblyName reference in concord.GetReferencedAssemblies()) {
-            if (reference.Name == "System.Reflection.Emit.Lightweight" ||
-                reference.Name == "System.Reflection.Emit.ILGeneration") {
-                referencesFacade = true;
-                break;
-            }
-        }
+        bool referencesFacade = concord.GetReferencedAssemblies().Any(reference =>
+            reference.Name == "System.Reflection.Emit.Lightweight" ||
+            reference.Name == "System.Reflection.Emit.ILGeneration");
 
         if (!referencesFacade) {
             return false;
