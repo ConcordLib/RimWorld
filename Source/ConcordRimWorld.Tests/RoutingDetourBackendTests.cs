@@ -13,7 +13,9 @@ public class RoutingDetourBackendTests
 {
     private static RoutingDetourBackend NewRouter(IDetourBackend inner, List<string> log)
     {
-        return new RoutingDetourBackend(inner, log.Add);
+        RoutingDetourBackend router = new RoutingDetourBackend(inner, log.Add);
+        router.Flush();
+        return router;
     }
 
     private static MethodBase TargetMethod()
@@ -313,70 +315,6 @@ public class RoutingDetourBackendTests
     {
         public void M()
         {
-        }
-    }
-
-    private class FakeInner : IDetourBackend
-    {
-        public int ApplyCallCount;
-        public int ApplyComposedCallCount;
-        public List<Tuple<MethodBase, IReadOnlyList<Injection>>> ApplyComposedCalls =
-            new List<Tuple<MethodBase, IReadOnlyList<Injection>>>();
-
-        public IDetourHandle Apply(MethodBase original, MethodInfo replacement)
-        {
-            ApplyCallCount++;
-            return new FakeHandle { Original = original };
-        }
-
-        public IDetourHandle ApplyComposed(MethodBase target, IReadOnlyList<Injection> added)
-        {
-            ApplyComposedCallCount++;
-            ApplyComposedCalls.Add(Tuple.Create(target, added));
-            return new FakeHandle { Original = target };
-        }
-    }
-
-    private class FakeBridge : IHarmonyBridge
-    {
-        private readonly Queue<BridgeRouteResult> results = new Queue<BridgeRouteResult>();
-
-        public int TryRouteCallCount;
-        public int ApplyToRoutedCallCount;
-        public bool LastForceRoute;
-
-        public void Enqueue(BridgeRouteResult result)
-        {
-            results.Enqueue(result);
-        }
-
-        public BridgeRouteResult TryRoute(MethodBase target, IReadOnlyList<Injection> added, bool forceRoute)
-        {
-            TryRouteCallCount++;
-            LastForceRoute = forceRoute;
-            return results.Dequeue();
-        }
-
-        public IDetourHandle ApplyToRouted(MethodBase target, IReadOnlyList<Injection> added)
-        {
-            ApplyToRoutedCallCount++;
-            return new FakeHandle { Original = target };
-        }
-
-        public IReadOnlyList<string> ForeignOwners(MethodBase target)
-        {
-            return Array.Empty<string>();
-        }
-    }
-
-    private class FakeHandle : IDetourHandle
-    {
-        public MethodBase Original { get; set; }
-        public bool IsApplied { get; set; } = true;
-
-        public void Dispose()
-        {
-            IsApplied = false;
         }
     }
 }
