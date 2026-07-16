@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ConcordRimWorld.Harmony</AssemblyName>
+    <RootNamespace>Concord.RimWorld.Harmony</RootNamespace>
+    <OutputPath>../../Current/Bridge</OutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>../ConcordRimWorld.Tests/libs/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Concord.Ref" Version="0.8.0-local" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ConcordRimWorld/ConcordRimWorld.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ConcordRimWorld.Tests" />
+  </ItemGroup>
+
+</Project>

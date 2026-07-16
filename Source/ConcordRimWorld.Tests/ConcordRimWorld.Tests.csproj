@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../ConcordRimWorld/ConcordRimWorld.csproj" />
+    <ProjectReference Include="../ConcordRimWorld.Harmony/ConcordRimWorld.Harmony.csproj" />
   </ItemGroup>
 
   <ItemGroup>

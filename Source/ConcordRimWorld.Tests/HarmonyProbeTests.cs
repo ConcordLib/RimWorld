@@ -11,7 +11,7 @@ public class HarmonyProbeTests
 {
     static HarmonyProbeTests()
     {
-        typeof(Harmony).GetType();
+        typeof(HarmonyLib.Harmony).GetType();
     }
 
     [Fact]

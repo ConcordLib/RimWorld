@@ -2,6 +2,7 @@ bin/
 obj/
 *.user
 Current/Assemblies/
+Current/Bridge/
 1.5/Assemblies/
 TestMod/Assemblies/
 
