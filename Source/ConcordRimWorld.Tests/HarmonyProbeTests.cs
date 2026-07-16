@@ -7,6 +7,7 @@ using HarmonyLib;
 
 namespace Concord.RimWorld.Tests;
 
+[Collection("HarmonySerial")]
 public class HarmonyProbeTests
 {
     static HarmonyProbeTests()

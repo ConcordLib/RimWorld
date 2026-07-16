@@ -79,13 +79,13 @@ public sealed class HarmonyBridge : IHarmonyBridge
         target = MethodIdentity.Normalize(target);
 
         long[] owned;
-        Exception failure;
 
         if (HarmonyLockScope.Available)
         {
             using (HarmonyLockScope.Enter())
             {
                 owned = TranspilerParticipant.Registry.Add(target, added);
+                Exception failure;
                 try
                 {
                     failure = RunRebuild(target);
@@ -95,11 +95,18 @@ public sealed class HarmonyBridge : IHarmonyBridge
                     RecoverSurvivors(target, owned);
                     throw;
                 }
+
+                if (failure != null)
+                {
+                    RecoverSurvivors(target, owned);
+                    throw new InvalidOperationException(failure.Message);
+                }
             }
         }
         else
         {
             owned = TranspilerParticipant.Registry.Add(target, added);
+            Exception failure;
             try
             {
                 failure = RunRebuild(target);
@@ -109,12 +116,12 @@ public sealed class HarmonyBridge : IHarmonyBridge
                 RecoverSurvivors(target, owned);
                 throw;
             }
-        }
 
-        if (failure != null)
-        {
-            RecoverSurvivors(target, owned);
-            throw new InvalidOperationException(failure.Message);
+            if (failure != null)
+            {
+                RecoverSurvivors(target, owned);
+                throw new InvalidOperationException(failure.Message);
+            }
         }
 
         return new BridgeDetourHandle(this, target, owned);

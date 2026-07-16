@@ -230,20 +230,61 @@ namespace ConcordRimWorld.Tests.Bridge
 
     public static class ConstantGapTarget
     {
+        public static List<string> Entries = new List<string>();
+
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static bool ShouldEject(float age)
+        public static int AddBonus(int x)
         {
-            return age >= 18f;
+            return x + 100;
         }
     }
 
     public static class ConstantGapMods
     {
-        public static float LiveEjectAge = 20f;
-
-        public static float EjectAge(float original)
+        public static int ReplaceBonus(int original)
         {
-            return LiveEjectAge;
+            return 200;
+        }
+
+        public static void ForeignPostfix()
+        {
+            ConstantGapTarget.Entries.Add("foreignPostfix");
+        }
+    }
+
+    public static class SelfOwnedTarget
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int Bare()
+        {
+            return 6;
+        }
+    }
+
+    public static class SelfOwnedMods
+    {
+        public static void ConcordHead(ControlHandle ch)
+        {
+        }
+    }
+
+    public static class ForeignOwnersTarget
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int Bare()
+        {
+            return 8;
+        }
+    }
+
+    public static class ForeignOwnersMods
+    {
+        public static void ConcordHead(ControlHandle ch)
+        {
+        }
+
+        public static void ForeignPostfix()
+        {
         }
     }
 
@@ -663,11 +704,11 @@ namespace ConcordRimWorld.Tests.Bridge
         }
 
         [Fact]
-        public void ConstantInjection_ReplacesInlinedIntConstant_UnderContestedTarget()
+        public void ConstantInjection_ReplacesInlinedInt32Constant_UnderGenuinelyContestedTarget()
         {
-            MethodInfo target = typeof(ConstantGapTarget).GetMethod(nameof(ConstantGapTarget.ShouldEject));
-            MethodInfo eject = typeof(ConstantGapMods).GetMethod(nameof(ConstantGapMods.EjectAge));
-            MethodInfo dummyPostfix = typeof(ConstantGapMods).GetMethod(nameof(ConstantGapMods.EjectAge));
+            MethodInfo target = typeof(ConstantGapTarget).GetMethod(nameof(ConstantGapTarget.AddBonus));
+            MethodInfo replaceBonus = typeof(ConstantGapMods).GetMethod(nameof(ConstantGapMods.ReplaceBonus));
+            MethodInfo foreignPostfix = typeof(ConstantGapMods).GetMethod(nameof(ConstantGapMods.ForeignPostfix));
 
             HarmonyLib.Harmony harmonyForeign = new HarmonyLib.Harmony("test.constant.foreign");
             HarmonyBridge bridge = new HarmonyBridge(_ => { });
@@ -675,22 +716,96 @@ namespace ConcordRimWorld.Tests.Bridge
             BridgeRouteResult result = null;
             try
             {
-                MethodInfo noop = typeof(ConstantGapTarget).GetMethod(nameof(ConstantGapTarget.ShouldEject));
-                harmonyForeign.Patch(target, postfix: null, prefix: null, transpiler: null, finalizer: null);
+                harmonyForeign.Patch(target, postfix: new HarmonyMethod(foreignPostfix));
+                Assert.True(HasForeignPatch(target));
 
-                Injection constant = new Injection(eject, new InjectAt.Constant(18f, 0), "test.concord.constant", 0);
-                ConstantGapMods.LiveEjectAge = 20f;
-                result = bridge.TryRoute(target, new[] { constant }, true);
+                Injection constant = new Injection(replaceBonus, new InjectAt.Constant(100, 0), "test.concord.constant", 0);
+                result = bridge.TryRoute(target, new[] { constant }, false);
                 Assert.Equal(BridgeRouteKind.Routed, result.Kind);
 
-                Assert.False((bool)target.Invoke(null, new object[] { 19f }));
-                Assert.True((bool)target.Invoke(null, new object[] { 21f }));
+                ConstantGapTarget.Entries.Clear();
+                int value = (int)target.Invoke(null, new object[] { 5 });
+
+                Assert.Equal(205, value);
+                Assert.Equal(new List<string> { "foreignPostfix" }, ConstantGapTarget.Entries);
             }
             finally
             {
                 result?.Handle?.Dispose();
                 harmonyForeign.UnpatchAll("test.constant.foreign");
             }
+        }
+
+        [Fact]
+        public void TryRoute_TargetPatchedOnlyByConcord_IsTreatedAsUncontested()
+        {
+            MethodInfo target = typeof(SelfOwnedTarget).GetMethod(nameof(SelfOwnedTarget.Bare));
+            MethodInfo headMethod = typeof(SelfOwnedMods).GetMethod(nameof(SelfOwnedMods.ConcordHead));
+            HarmonyBridge bridge = new HarmonyBridge(_ => { });
+
+            BridgeRouteResult firstResult = null;
+            try
+            {
+                firstResult = bridge.TryRoute(target, new[] { MakeHeadInjection(headMethod, "test.selfowned") }, true);
+                Assert.Equal(BridgeRouteKind.Routed, firstResult.Kind);
+
+                BridgeRouteResult secondResult = bridge.TryRoute(target, new[] { MakeHeadInjection(headMethod, "test.selfowned.second") }, false);
+
+                Assert.Equal(BridgeRouteKind.NotContested, secondResult.Kind);
+            }
+            finally
+            {
+                firstResult?.Handle?.Dispose();
+            }
+        }
+
+        [Fact]
+        public void ForeignOwners_ReturnsForeignOwnerId_ExcludesConcordsOwnOwner()
+        {
+            MethodInfo target = typeof(ForeignOwnersTarget).GetMethod(nameof(ForeignOwnersTarget.Bare));
+            MethodInfo headMethod = typeof(ForeignOwnersMods).GetMethod(nameof(ForeignOwnersMods.ConcordHead));
+            MethodInfo foreignPostfix = typeof(ForeignOwnersMods).GetMethod(nameof(ForeignOwnersMods.ForeignPostfix));
+
+            HarmonyLib.Harmony harmonyForeign = new HarmonyLib.Harmony("test.foreignowners.foreign");
+            HarmonyBridge bridge = new HarmonyBridge(_ => { });
+
+            BridgeRouteResult result = null;
+            try
+            {
+                harmonyForeign.Patch(target, postfix: new HarmonyMethod(foreignPostfix));
+
+                result = bridge.TryRoute(target, new[] { MakeHeadInjection(headMethod, "test.foreignowners.concord") }, false);
+                Assert.Equal(BridgeRouteKind.Routed, result.Kind);
+
+                IReadOnlyList<string> owners = bridge.ForeignOwners(target);
+
+                Assert.Contains("test.foreignowners.foreign", owners);
+                Assert.DoesNotContain("concord.bridge", owners);
+            }
+            finally
+            {
+                result?.Handle?.Dispose();
+                harmonyForeign.UnpatchAll("test.foreignowners.foreign");
+            }
+        }
+
+        private static bool HasForeignPatch(MethodBase target)
+        {
+            Patches patchInfo = PatchProcessor.GetPatchInfo(target);
+            if (patchInfo == null)
+            {
+                return false;
+            }
+
+            foreach (Patch patch in patchInfo.Postfixes)
+            {
+                if (patch.PatchMethod != TranspilerParticipant.TranspileMethod)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         [Fact]
