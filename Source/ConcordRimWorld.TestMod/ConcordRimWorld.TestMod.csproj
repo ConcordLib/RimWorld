@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Concord.Ref" Version="0.7.0" PrivateAssets="all" />
+    <PackageReference Include="Concord.Ref" Version="0.8.0-local" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
