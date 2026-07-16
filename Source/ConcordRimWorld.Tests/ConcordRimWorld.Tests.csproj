@@ -19,4 +19,10 @@
     <ProjectReference Include="../ConcordRimWorld/ConcordRimWorld.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>libs/0Harmony.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>
