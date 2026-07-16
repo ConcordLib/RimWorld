@@ -163,4 +163,40 @@ public class HarmonyProbeTests
         Assert.False(result);
         Assert.NotNull(logOutput);
     }
+
+
+    [Fact]
+    public void TryLoadBridge_HarmonyPresent_ReturnsBridgeAndLogsBridgeActive()
+    {
+        string repoRoot = ResolveRepoRoot();
+        string logOutput = null;
+
+        IHarmonyBridge bridge = HarmonyProbe.TryLoadBridge(
+            repoRoot,
+            log => logOutput = log,
+            () => AppDomain.CurrentDomain.GetAssemblies()
+        );
+
+        Assert.NotNull(bridge);
+        Assert.NotNull(logOutput);
+        Assert.Contains(CoexistenceLogMarkers.BridgeActive, logOutput);
+    }
+
+    private static string ResolveRepoRoot()
+    {
+        Uri codeBase = new Uri(typeof(HarmonyProbeTests).Assembly.CodeBase);
+        string current = Path.GetDirectoryName(codeBase.LocalPath);
+        while (current != null)
+        {
+            string candidate = Path.Combine(current, "Current", "Bridge", "ConcordRimWorld.Harmony.dll");
+            if (File.Exists(candidate))
+            {
+                return current;
+            }
+
+            current = Path.GetDirectoryName(current);
+        }
+
+        throw new InvalidOperationException("Could not resolve repo root from test assembly location.");
+    }
 }
