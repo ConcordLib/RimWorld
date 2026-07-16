@@ -65,7 +65,9 @@ public sealed class RoutingDetourBackend : IDetourBackend
 
             if (state == RouteState.Unpinned)
             {
+                IDetourHandle handle = inner.Apply(original, replacement);
                 PinRaw(original);
+                return handle;
             }
 
             return inner.Apply(original, replacement);
@@ -156,16 +158,18 @@ public sealed class RoutingDetourBackend : IDetourBackend
 
         if (bridge == null)
         {
+            IDetourHandle handle = inner.ApplyComposed(target, added);
             PinRaw(target);
-            return inner.ApplyComposed(target, added);
+            return handle;
         }
 
         BridgeRouteResult result = bridge.TryRoute(target, added, RouteEverything);
 
         if (result.Kind == BridgeRouteKind.NotContested)
         {
+            IDetourHandle handle = inner.ApplyComposed(target, added);
             PinRaw(target);
-            return inner.ApplyComposed(target, added);
+            return handle;
         }
 
         if (result.Kind == BridgeRouteKind.Routed)

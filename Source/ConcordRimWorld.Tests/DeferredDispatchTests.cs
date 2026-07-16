@@ -228,6 +228,33 @@ public class DeferredDispatchTests
         Assert.Equal(RouteState.Raw, router.GetRoute(target));
     }
 
+    [Fact]
+    public void ApplyComposedRouted_NullBridgePath_ThrowingInner_LeavesTargetUnpinned_AllowsRerouting()
+    {
+        ThrowingFakeInner inner = new ThrowingFakeInner();
+        MethodBase target = TargetMethod();
+        inner.ThrowFor(target, new InvalidOperationException("apply failed"));
+        List<string> log = new List<string>();
+        RoutingDetourBackend router = NewUnflushedRouter(inner, log);
+        router.Flush();
+        IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
+
+        Assert.Throws<InvalidOperationException>(() => router.ApplyComposed(target, added));
+        Assert.Equal(RouteState.Unpinned, router.GetRoute(target));
+
+        inner.ClearThrow(target);
+        FakeBridge bridge = new FakeBridge();
+        FakeHandle bridgeHandle = new FakeHandle { Original = target };
+        bridge.Enqueue(BridgeRouteResult.Routed(bridgeHandle));
+        router.ActivateBridge(bridge);
+
+        IDetourHandle result = router.ApplyComposed(target, added);
+
+        Assert.Equal(1, bridge.TryRouteCallCount);
+        Assert.Same(bridgeHandle, result);
+        Assert.Equal(RouteState.Bridge, router.GetRoute(target));
+    }
+
     private class ThrowingFakeInner : IDetourBackend
     {
         private readonly Dictionary<MethodBase, Exception> failures = new Dictionary<MethodBase, Exception>();
@@ -240,6 +267,11 @@ public class DeferredDispatchTests
         public void ThrowFor(MethodBase target, Exception exception)
         {
             failures[target] = exception;
+        }
+
+        public void ClearThrow(MethodBase target)
+        {
+            failures.Remove(target);
         }
 
         public IDetourHandle Apply(MethodBase original, MethodInfo replacement)
