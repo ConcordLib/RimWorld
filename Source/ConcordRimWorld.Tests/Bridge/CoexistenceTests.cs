@@ -445,6 +445,52 @@ namespace ConcordRimWorld.Tests.Bridge
         }
     }
 
+    public static class ComposeFailureLog
+    {
+        public static List<string> Entries = new List<string>();
+    }
+
+    public static class ComposeFailureHelper
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void Step()
+        {
+            ComposeFailureLog.Entries.Add("step");
+        }
+    }
+
+    public static class ComposeFailureTarget
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int Run(int x)
+        {
+            ComposeFailureHelper.Step();
+            ComposeFailureLog.Entries.Add("body");
+            return x * 3;
+        }
+    }
+
+    public static class ComposeFailureMods
+    {
+        public static int WrapRun(int x, Operation<int, int> original)
+        {
+            ComposeFailureLog.Entries.Add("pre");
+            int inner = original.Invoke(x);
+            ComposeFailureLog.Entries.Add("post");
+            return inner;
+        }
+
+        public static void BeforeStep(ControlHandle ch)
+        {
+            ComposeFailureLog.Entries.Add("injected");
+        }
+
+        public static void ForeignPostfix()
+        {
+            ComposeFailureLog.Entries.Add("foreignPostfix");
+        }
+    }
+
     [Collection("HarmonySerial")]
     public sealed class CoexistenceTests
     {
@@ -1089,6 +1135,73 @@ namespace ConcordRimWorld.Tests.Bridge
             }
 
             return false;
+        }
+
+        [Fact]
+        public void TryRoute_PassesSupportMatrixButFailsComposition_RejectsWithCleanCompensation()
+        {
+            MethodInfo target = typeof(ComposeFailureTarget).GetMethod(nameof(ComposeFailureTarget.Run));
+            MethodInfo wrapMethod = typeof(ComposeFailureMods).GetMethod(nameof(ComposeFailureMods.WrapRun));
+            MethodInfo beforeStep = typeof(ComposeFailureMods).GetMethod(nameof(ComposeFailureMods.BeforeStep));
+            MethodInfo stepMethod = typeof(ComposeFailureHelper).GetMethod(nameof(ComposeFailureHelper.Step));
+            MethodInfo foreignPostfix = typeof(ComposeFailureMods).GetMethod(nameof(ComposeFailureMods.ForeignPostfix));
+
+            HarmonyLib.Harmony harmonyForeign = new HarmonyLib.Harmony("test.composefailure.foreign");
+            List<string> logs = new List<string>();
+            HarmonyBridge bridge = new HarmonyBridge(logs.Add);
+
+            try
+            {
+                harmonyForeign.Patch(target, postfix: new HarmonyMethod(foreignPostfix));
+
+                Injection around = new Injection(wrapMethod, new InjectAt.Around(), "test.composefailure.around", 0);
+                Injection invoke = new Injection(
+                    beforeStep,
+                    new InjectAt.Invoke(typeof(ComposeFailureHelper), nameof(ComposeFailureHelper.Step), At.Head, 0),
+                    "test.composefailure.invoke",
+                    0);
+
+                string preValidateReason = SupportMatrix.Validate(MethodIdentity.Normalize(target), new Injection[] { around, invoke }, PatchProcessor.GetPatchInfo(target));
+                Assert.Null(preValidateReason);
+
+                BridgeRouteResult result = bridge.TryRoute(target, new[] { around, invoke }, forceRoute: false);
+
+                Assert.Equal(BridgeRouteKind.Rejected, result.Kind);
+
+                ComposeFailureLog.Entries.Clear();
+                int value = ComposeFailureTarget.Run(5);
+
+                Assert.Equal(15, value);
+                Assert.Equal(new List<string> { "step", "body", "foreignPostfix" }, ComposeFailureLog.Entries);
+
+                MethodBase normalized = MethodIdentity.Normalize(target);
+                Assert.False(TranspilerParticipant.Registry.HasInjections(normalized));
+
+                Patches patchInfoAfter = PatchProcessor.GetPatchInfo(target);
+                Assert.NotNull(patchInfoAfter);
+                Assert.False(ContainsConcordTranspiler(patchInfoAfter));
+                Assert.Single(patchInfoAfter.Postfixes);
+                Assert.Equal(foreignPostfix, patchInfoAfter.Postfixes[0].PatchMethod);
+
+                bool foundStreamRejectedLog = false;
+                foreach (string line in logs)
+                {
+                    if (line.Contains(CoexistenceLogMarkers.StreamRejected))
+                    {
+                        foundStreamRejectedLog = true;
+                        break;
+                    }
+                }
+
+                Assert.True(foundStreamRejectedLog);
+            }
+            finally
+            {
+                TranspilerParticipant.Registry.Clear(MethodIdentity.Normalize(target));
+                TranspilerParticipant.LastStreamFailure = null;
+                TranspilerParticipant.Log = null;
+                harmonyForeign.UnpatchAll("test.composefailure.foreign");
+            }
         }
     }
 }

@@ -32,8 +32,23 @@ internal static class TranspilerParticipant
         }
 
         List<CodeInstruction> stream = new List<CodeInstruction>(instructions);
-        NeutralBody incoming = CodeInstructionConverter.ToNeutral(stream, out HarmonyStreamContext context);
-        NeutralBody outgoing = BodyTransformer.Transform(original, incoming, ordered);
-        return CodeInstructionConverter.FromNeutral(outgoing, context, generator);
+        try
+        {
+            NeutralBody incoming = CodeInstructionConverter.ToNeutral(stream, out HarmonyStreamContext context);
+            NeutralBody outgoing = BodyTransformer.Transform(original, incoming, ordered);
+            return CodeInstructionConverter.FromNeutral(outgoing, context, generator);
+        }
+        catch (NeutralConversionException ex)
+        {
+            LastStreamFailure = ex;
+            Log?.Invoke(CoexistenceLogMarkers.StreamRejected + " " + original.Name + ": " + ex.Message);
+            return instructions;
+        }
+        catch (ConcordEmitException ex)
+        {
+            LastStreamFailure = ex;
+            Log?.Invoke(CoexistenceLogMarkers.StreamRejected + " " + original.Name + ": " + ex.Message);
+            return instructions;
+        }
     }
 }

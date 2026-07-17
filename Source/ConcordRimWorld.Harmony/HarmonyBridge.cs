@@ -52,6 +52,12 @@ public sealed class HarmonyBridge : IHarmonyBridge
                 return BridgeRouteResult.NotContested();
             }
 
+            string reason = SupportMatrix.Validate(target, added, patchInfo);
+            if (reason != null)
+            {
+                return BridgeRouteResult.Rejected(reason);
+            }
+
             long[] owned = TranspilerParticipant.Registry.Add(target, added);
             Exception failure;
             try
@@ -84,6 +90,13 @@ public sealed class HarmonyBridge : IHarmonyBridge
         {
             using (HarmonyLockScope.Enter())
             {
+                Patches patchInfo = PatchProcessor.GetPatchInfo(target);
+                string reason = SupportMatrix.Validate(target, added, patchInfo);
+                if (reason != null)
+                {
+                    throw new InvalidOperationException(reason);
+                }
+
                 owned = TranspilerParticipant.Registry.Add(target, added);
                 Exception failure;
                 try
@@ -105,6 +118,13 @@ public sealed class HarmonyBridge : IHarmonyBridge
         }
         else
         {
+            Patches patchInfo = PatchProcessor.GetPatchInfo(target);
+            string reason = SupportMatrix.Validate(target, added, patchInfo);
+            if (reason != null)
+            {
+                throw new InvalidOperationException(reason);
+            }
+
             owned = TranspilerParticipant.Registry.Add(target, added);
             Exception failure;
             try
