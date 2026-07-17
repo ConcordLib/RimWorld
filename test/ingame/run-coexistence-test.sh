@@ -2,7 +2,9 @@
 set -euo pipefail
 
 MODE="${1:---contested}"
-case "$MODE" in --contested|--uncontested|--harmony-absent) ;; *) echo "usage: $0 [--contested|--uncontested|--harmony-absent]"; exit 2 ;; esac
+case "$MODE" in --contested|--uncontested|--harmony-absent|--second-harmony|--second-harmony-inner) ;; *) echo "usage: $0 [--contested|--uncontested|--harmony-absent|--second-harmony|--second-harmony-inner] [--keep-log]"; exit 2 ;; esac
+KEEP_LOG=0
+[ "${2:-}" = "--keep-log" ] && KEEP_LOG=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -17,7 +19,7 @@ LOG="$WORK/player.log"
 GAME=""
 
 # --- refuse to run over pre-existing coex-* symlinks (someone else's) ---
-LINKS=("$RIMWORLD/Mods/coex-harmony" "$RIMWORLD/Mods/coex-concord" "$RIMWORLD/Mods/coex-harmonyhalf" "$RIMWORLD/Mods/coex-concordhalf")
+LINKS=("$RIMWORLD/Mods/coex-harmony" "$RIMWORLD/Mods/coex-concord" "$RIMWORLD/Mods/coex-harmonyhalf" "$RIMWORLD/Mods/coex-concordhalf" "$RIMWORLD/Mods/coex-harmonysecond" "$RIMWORLD/Mods/coex-harmonybreaker")
 for link in "${LINKS[@]}"; do
   if [ -e "$link" ] || [ -L "$link" ]; then echo "REFUSING: $link already exists"; exit 2; fi
 done
@@ -41,6 +43,11 @@ cleanup() {
   for f in ${SIDELINED_DIRS[@]+"${SIDELINED_DIRS[@]}"}; do
     [ -e "$f.coexbak" ] && mv -f "$f.coexbak" "$f"
   done
+  if [ "$KEEP_LOG" = "1" ] && [ -f "$LOG" ]; then
+    KEPT="/tmp/concord-coex-${MODE#--}.log"
+    cp -f "$LOG" "$KEPT"
+    echo "log kept at $KEPT"
+  fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -49,6 +56,8 @@ trap cleanup EXIT
 dotnet build "$REPO_ROOT/Concord.RimWorld.slnx" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
 dotnet build "$SCRIPT_DIR/HarmonyHalfMod/Source/HarmonyHalf.csproj" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
 dotnet build "$SCRIPT_DIR/ConcordHalfMod/Source/ConcordHalf.csproj" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
+dotnet build "$SCRIPT_DIR/HarmonySecondMod/Source/HarmonySecond.csproj" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
+dotnet build "$SCRIPT_DIR/HarmonyBreakerMod/Source/HarmonyBreaker.csproj" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
 PINNED=$(sed -n 's/.*Concord.Runtime" Version="\([^"]*\)".*/\1/p' "$REPO_ROOT/Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj")
 RUNTIME="$HOME/.nuget/packages/concord.runtime/$PINNED/lib/net472/Concord.dll"
 test -f "$RUNTIME" || { echo "FAIL: Concord.Runtime $PINNED net472 dll not in nuget cache"; exit 1; }
@@ -77,14 +86,18 @@ make_link "$HARMONY_WS" "$RIMWORLD/Mods/coex-harmony"
 make_link "$REPO_ROOT" "$RIMWORLD/Mods/coex-concord"
 make_link "$SCRIPT_DIR/HarmonyHalfMod" "$RIMWORLD/Mods/coex-harmonyhalf"
 make_link "$SCRIPT_DIR/ConcordHalfMod" "$RIMWORLD/Mods/coex-concordhalf"
+make_link "$SCRIPT_DIR/HarmonySecondMod" "$RIMWORLD/Mods/coex-harmonysecond"
+make_link "$SCRIPT_DIR/HarmonyBreakerMod" "$RIMWORLD/Mods/coex-harmonybreaker"
 
 # --- 4. back up + write the real ModsConfig with the per-mode active set (Concord loadBefore core) ---
 mkdir -p "$CONFIG_DIR"
 if [ -f "$MODSCONFIG" ]; then cp -f "$MODSCONFIG" "$WORK/ModsConfig.xml.real"; MODSCONFIG_BACKED_UP=1; fi
 case "$MODE" in
-  --contested)      ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.harmonyhalf</li><li>concordtest.concordhalf</li>" ;;
-  --uncontested)    ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li>" ;;
-  --harmony-absent) ACTIVE="<li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li>" ;;
+  --contested)            ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.harmonyhalf</li><li>concordtest.concordhalf</li>" ;;
+  --uncontested)          ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li>" ;;
+  --harmony-absent)       ACTIVE="<li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li>" ;;
+  --second-harmony)       ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li><li>concordtest.harmonyhalf</li><li>concordtest.harmonysecond</li>" ;;
+  --second-harmony-inner) ACTIVE="<li>brrainz.harmony</li><li>concordlib.concord</li><li>ludeon.rimworld</li><li>concordtest.concordhalf</li><li>concordtest.harmonyhalf</li><li>concordtest.harmonybreaker</li>" ;;
 esac
 cat > "$MODSCONFIG" <<XML
 <?xml version="1.0" encoding="utf-8"?>
@@ -97,10 +110,15 @@ XML
 GAME=$!
 
 # --- 6. wait for the probe marker (max 4 min); fall back to the default Player.log if -logFile didn't take ---
+case "$MODE" in
+  --second-harmony)       WAIT_MARKER="\[COEX\] second-invoke head-count=" ;;
+  --second-harmony-inner) WAIT_MARKER="\[COEX\] breaker-invoke result=" ;;
+  *)                      WAIT_MARKER="\[COEX\] invoke-result=" ;;
+esac
 FOUND_LOG="$LOG"
 for _ in $(seq 1 240); do
-  if grep -q "\[COEX\] invoke-result=" "$LOG" 2>/dev/null; then FOUND_LOG="$LOG"; break; fi
-  if grep -q "\[COEX\] invoke-result=" "$PLAYERLOG" 2>/dev/null; then FOUND_LOG="$PLAYERLOG"; break; fi
+  if grep -q "$WAIT_MARKER" "$LOG" 2>/dev/null; then FOUND_LOG="$LOG"; break; fi
+  if grep -q "$WAIT_MARKER" "$PLAYERLOG" 2>/dev/null; then FOUND_LOG="$PLAYERLOG"; break; fi
   if ! kill -0 "$GAME" 2>/dev/null; then break; fi
   sleep 1
 done
@@ -132,6 +150,21 @@ case "$MODE" in
   --harmony-absent)
     forbid  "\[Concord.Coex\] bridge-active" "bridge must never load without Harmony"
     forbid  "\[Concord.Coex\] routed-contested" "nothing can route without Harmony"
+    ;;
+  --second-harmony)
+    require "\[COEX\] harmony-postfix" "harmony postfix missing"
+    require "\[Concord.Coex\] routed-contested" "bridge did not route the contested target"
+    require "\[COEX\] harmony-second-patched" "second harmony patch never applied"
+    require "\[COEX\] harmony-second-postfix" "second harmony postfix never ran"
+    require "\[COEX\] second-invoke head-count=2" "concord head did not survive the second harmony rebuild"
+    ;;
+  --second-harmony-inner)
+    require "\[COEX\] harmony-postfix" "harmony postfix missing"
+    require "\[Concord.Coex\] routed-contested" "bridge did not route the contested target"
+    require "\[COEX\] harmony-breaker-patched" "breaker transpiler never applied"
+    require "\[Concord.Coex\] stream-rejected" "converter did not reject the fault-block stream"
+    require "\[COEX\] breaker-invoke result=42" "method must still return the correct value after degrade"
+    forbid  "\[COEX\] breaker-invoke result=42 head-count=2" "concord head kept running after the stream was rejected"
     ;;
 esac
 
