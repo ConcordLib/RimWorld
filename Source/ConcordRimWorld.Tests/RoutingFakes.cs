@@ -38,6 +38,7 @@ internal class FakeBridge : IHarmonyBridge
     public int TryRouteCallCount;
     public int ApplyToRoutedCallCount;
     public bool LastForceRoute;
+    public Func<MethodBase, IReadOnlyList<string>> ForeignOwnersFunc;
 
     public void Enqueue(BridgeRouteResult result)
     {
@@ -59,7 +60,7 @@ internal class FakeBridge : IHarmonyBridge
 
     public IReadOnlyList<string> ForeignOwners(MethodBase target)
     {
-        return Array.Empty<string>();
+        return ForeignOwnersFunc != null ? ForeignOwnersFunc(target) : Array.Empty<string>();
     }
 }
 

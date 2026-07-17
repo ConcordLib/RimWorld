@@ -21,7 +21,7 @@ public class ConcordMod : Mod {
         try {
             CheckLoadOrder(content);
             ConcordSettings settings = GetSettings<ConcordSettings>();
-            RimWorldAdapter.Wire();
+            RimWorldAdapter.Wire(content, settings);
             Log.Message("[Concord.RimWorld] Concord runtime wired.");
         } catch (Exception e) {
             Log.Error("[Concord.RimWorld] Failed to initialize Concord: " + e);

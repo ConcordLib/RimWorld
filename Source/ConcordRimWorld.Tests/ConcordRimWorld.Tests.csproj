@@ -24,6 +24,9 @@
     <Reference Include="0Harmony">
       <HintPath>libs/0Harmony.dll</HintPath>
     </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(RimWorldManaged)/Assembly-CSharp.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
