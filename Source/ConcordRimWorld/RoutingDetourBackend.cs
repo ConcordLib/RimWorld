@@ -211,7 +211,7 @@ public sealed class RoutingDetourBackend : IDetourBackend
 
     private static string DescribeTarget(MethodBase target)
     {
-        return target.DeclaringType.Name + "." + target.Name;
+        return (target.DeclaringType?.Name ?? "<module>") + "." + target.Name;
     }
 
     private sealed class PendingApply

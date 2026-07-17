@@ -29,20 +29,27 @@ public sealed class ContentionWatcher
         IReadOnlyCollection<MethodBase> targets = rawPinnedTargets();
         foreach (MethodBase target in targets)
         {
-            IReadOnlyList<string> owners = foreignOwners(target);
-            if (owners.Count == 0)
+            try
             {
-                continue;
+                IReadOnlyList<string> owners = foreignOwners(target);
+                if (owners.Count == 0)
+                {
+                    continue;
+                }
+
+                string ownerList = string.Join(", ", owners);
+                string warningMessage = $"{CoexistenceLogMarkers.LateContention} {target} patched by [{ownerList}]. Concord injections on this method are not running.";
+                warn(warningMessage);
+
+                if (!seenDialogTargets.Contains(target))
+                {
+                    seenDialogTargets.Add(target);
+                    dialogOnce(warningMessage);
+                }
             }
-
-            string ownerList = string.Join(", ", owners);
-            string warningMessage = $"{CoexistenceLogMarkers.LateContention} {target} patched by [{ownerList}]. Concord injections on this method are not running.";
-            warn(warningMessage);
-
-            if (!seenDialogTargets.Contains(target))
+            catch (Exception ex)
             {
-                seenDialogTargets.Add(target);
-                dialogOnce(warningMessage);
+                warn($"{CoexistenceLogMarkers.LateContention} foreign-owner lookup failed for {target}: {ex.Message}");
             }
         }
     }

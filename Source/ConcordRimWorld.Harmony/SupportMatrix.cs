@@ -64,28 +64,7 @@ namespace Concord.RimWorld.Harmony
                 return false;
             }
 
-            FieldInfo innerPrefixesField = typeof(Patches).GetField("InnerPrefixes", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo innerPostfixesField = typeof(Patches).GetField("InnerPostfixes", BindingFlags.Public | BindingFlags.Instance);
-
-            if (innerPrefixesField != null)
-            {
-                object innerPrefixes = innerPrefixesField.GetValue(patchInfo);
-                if (innerPrefixes is System.Collections.ICollection prefixCollection && prefixCollection.Count > 0)
-                {
-                    return true;
-                }
-            }
-
-            if (innerPostfixesField != null)
-            {
-                object innerPostfixes = innerPostfixesField.GetValue(patchInfo);
-                if (innerPostfixes is System.Collections.ICollection postfixCollection && postfixCollection.Count > 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return patchInfo.InnerPrefixes.Count > 0 || patchInfo.InnerPostfixes.Count > 0;
         }
 
         internal static bool CallsGetExecutingAssembly(MethodBase method)
@@ -96,43 +75,54 @@ namespace Concord.RimWorld.Harmony
                 return false;
             }
 
-            byte[] il = body.GetILAsByteArray();
-            Module module = method.Module;
-            int position = 0;
-            while (position < il.Length)
+            try
             {
-                short value = il[position];
-                position++;
-                if (value == 0xFE)
+                byte[] il = body.GetILAsByteArray();
+                Module module = method.Module;
+                int position = 0;
+                while (position < il.Length)
                 {
-                    value = (short)(0xFE00 | il[position]);
+                    short value = il[position];
                     position++;
-                }
-
-                OpCode opcode = OpCodesByValue[value];
-                if (opcode.OperandType == OperandType.InlineMethod)
-                {
-                    int token = BitConverter.ToInt32(il, position);
-                    MethodBase resolved;
-                    try
+                    if (value == 0xFE)
                     {
-                        resolved = module.ResolveMethod(token, method.DeclaringType?.GetGenericArguments(), method is MethodInfo genericSource ? genericSource.GetGenericArguments() : null);
-                    }
-                    catch (ArgumentException)
-                    {
-                        resolved = null;
+                        value = (short)(0xFE00 | il[position]);
+                        position++;
                     }
 
-                    if (resolved != null && resolved.Name == "GetExecutingAssembly" && resolved.DeclaringType == typeof(System.Reflection.Assembly))
+                    if (!OpCodesByValue.TryGetValue(value, out OpCode opcode))
                     {
                         return true;
                     }
+
+                    if (opcode.OperandType == OperandType.InlineMethod)
+                    {
+                        int token = BitConverter.ToInt32(il, position);
+                        MethodBase resolved;
+                        try
+                        {
+                            resolved = module.ResolveMethod(token, method.DeclaringType?.GetGenericArguments(), method is MethodInfo genericSource ? genericSource.GetGenericArguments() : null);
+                        }
+                        catch (ArgumentException)
+                        {
+                            resolved = null;
+                        }
+
+                        if (resolved != null && resolved.Name == "GetExecutingAssembly" && resolved.DeclaringType == typeof(System.Reflection.Assembly))
+                        {
+                            return true;
+                        }
+                    }
+
+                    position += OperandSize(opcode, il, position);
                 }
 
-                position += OperandSize(opcode, il, position);
+                return false;
             }
-
-            return false;
+            catch
+            {
+                return true;
+            }
         }
 
         private static Dictionary<short, OpCode> BuildOpCodeTable()

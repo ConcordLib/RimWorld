@@ -63,6 +63,42 @@ public class ContentionWatcherTests
         Assert.Empty(dialogs);
     }
 
+
+    [Fact]
+    public void ThrowingLookupForOneTarget_StillProcessesRemainingTargets()
+    {
+        List<MethodBase> pinned = new List<MethodBase> {
+            typeof(ContentionWatcherTests).GetMethod(nameof(DummyMethod), BindingFlags.NonPublic | BindingFlags.Static),
+            typeof(ContentionWatcherTests).GetMethod(nameof(DummyMethodTwo), BindingFlags.NonPublic | BindingFlags.Static)
+        };
+        List<string> warnings = new List<string>();
+        List<string> dialogs = new List<string>();
+
+        Func<IReadOnlyCollection<MethodBase>> rawPinned = () => pinned.AsReadOnly();
+        Func<MethodBase, IReadOnlyList<string>> foreignOwners = (m) => {
+            if (m.Name == nameof(DummyMethod)) {
+                throw new InvalidOperationException("lookup failed");
+            }
+
+            return new List<string> { "test.owner" }.AsReadOnly();
+        };
+        Action<string> warn = (msg) => warnings.Add(msg);
+        Action<string> dialogOnce = (msg) => dialogs.Add(msg);
+
+        ContentionWatcher watcher = new ContentionWatcher(rawPinned, foreignOwners, warn, dialogOnce);
+
+        watcher.RunCheckpoint();
+
+        Assert.Equal(2, warnings.Count);
+        Assert.Contains(warnings, w => w.Contains("lookup failed"));
+        Assert.Contains(warnings, w => w.Contains("test.owner"));
+        Assert.Single(dialogs);
+    }
+
+    private static void DummyMethodTwo()
+    {
+    }
+
     private static void DummyMethod()
     {
     }

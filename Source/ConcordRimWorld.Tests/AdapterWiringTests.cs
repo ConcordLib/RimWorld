@@ -192,6 +192,7 @@ public class AdapterWiringTests
             RimWorldAdapter.Wire(context);
 
             Assert.Equal(1, loadBridgeCallCount);
+            Assert.False(RimWorldAdapter.HasLateActivationHandler);
 
             RoutingDetourBackend router = (RoutingDetourBackend)DetourBackend.Current;
             router.Flush();
@@ -256,6 +257,8 @@ public class AdapterWiringTests
 
             RimWorldAdapter.Wire(context);
 
+            Assert.True(RimWorldAdapter.HasLateActivationHandler);
+
             RoutingDetourBackend router = (RoutingDetourBackend)DetourBackend.Current;
             Assert.Equal(RouteState.Raw, router.GetRoute(ProbeMethod()));
 
@@ -268,6 +271,8 @@ public class AdapterWiringTests
             context.LoadBridge = (root, l) => lateBridge;
 
             RimWorldAdapter.TryLateActivation(context);
+            Assert.False(RimWorldAdapter.HasLateActivationHandler);
+
             router.Flush();
 
             MethodBase lateTarget = typeof(AdapterWiringTests).GetMethod(
@@ -294,5 +299,67 @@ public class AdapterWiringTests
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void LateTarget()
     {
+    }
+
+
+    [Fact]
+    public void TryLateActivation_SecondConcurrentCall_IsANoOp()
+    {
+        FakeInner inner = new FakeInner();
+        DetourBackend.Current = inner;
+        List<string> log = new List<string>();
+        List<Action> scheduled = new List<Action>();
+
+        try
+        {
+            WireContext context = NewContext(inner, log, scheduled, (root, l) => null, true, false);
+
+            RimWorldAdapter.Wire(context);
+
+            int loadBridgeCallCount = 0;
+            FakeBridge lateBridge = new FakeBridge();
+            lateBridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+
+            context.LoadBridge = (root, l) => {
+                loadBridgeCallCount++;
+                return lateBridge;
+            };
+
+            RimWorldAdapter.TryLateActivation(context);
+            RimWorldAdapter.TryLateActivation(context);
+
+            Assert.Equal(1, loadBridgeCallCount);
+        }
+        finally
+        {
+            DetourBackend.Current = inner;
+            RimWorldAdapter.ResetForTests();
+        }
+    }
+
+    [Fact]
+    public void TryLateActivation_BridgeNeverArrives_StillDetachesHandler()
+    {
+        FakeInner inner = new FakeInner();
+        DetourBackend.Current = inner;
+        List<string> log = new List<string>();
+        List<Action> scheduled = new List<Action>();
+
+        try
+        {
+            WireContext context = NewContext(inner, log, scheduled, (root, l) => null, true, false);
+
+            RimWorldAdapter.Wire(context);
+            Assert.True(RimWorldAdapter.HasLateActivationHandler);
+
+            RimWorldAdapter.TryLateActivation(context);
+
+            Assert.False(RimWorldAdapter.HasLateActivationHandler);
+        }
+        finally
+        {
+            DetourBackend.Current = inner;
+            RimWorldAdapter.ResetForTests();
+        }
     }
 }

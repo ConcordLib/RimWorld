@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
 using Concord.Detour;
 using Concord.Emit;
 using Concord.Orchestration;
@@ -14,6 +15,7 @@ public static class RimWorldAdapter {
     private static volatile IHarmonyBridge activeBridge;
     private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
     private static AssemblyLoadEventHandler lateActivationHandler;
+    private static int lateActivationAttempted;
     private static IDetourBackend backendBeforeWire;
 
     public static void Wire(ModContentPack content, ConcordSettings settings) {
@@ -59,21 +61,26 @@ public static class RimWorldAdapter {
             if (bridge != null) {
                 activeBridge = bridge;
                 router.ActivateBridge(bridge);
+            } else {
+                lateActivationHandler = (sender, args) => {
+                    if (activeBridge != null) {
+                        if (lateActivationHandler != null) {
+                            AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
+                            lateActivationHandler = null;
+                        }
+
+                        return;
+                    }
+
+                    if (args.LoadedAssembly.GetName().Name != "0Harmony") {
+                        return;
+                    }
+
+                    TryLateActivation(context);
+                };
+
+                AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
             }
-
-            lateActivationHandler = (sender, args) => {
-                if (activeBridge != null) {
-                    return;
-                }
-
-                if (args.LoadedAssembly.GetName().Name != "0Harmony") {
-                    return;
-                }
-
-                TryLateActivation(context);
-            };
-
-            AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
         }
 
         Func<MethodBase, IReadOnlyList<string>> lookup = target => {
@@ -98,15 +105,23 @@ public static class RimWorldAdapter {
     }
 
     internal static void TryLateActivation(WireContext context) {
-        IHarmonyBridge bridge = context.LoadBridge(context.ModRootDir, context.Log);
-        if (bridge == null) {
+        if (Interlocked.CompareExchange(ref lateActivationAttempted, 1, 0) != 0) {
             return;
         }
 
-        activeBridge = bridge;
+        try {
+            IHarmonyBridge bridge = context.LoadBridge(context.ModRootDir, context.Log);
+            if (bridge == null) {
+                return;
+            }
 
-        if (DetourBackend.Current is RoutingDetourBackend router) {
-            router.ActivateBridge(bridge);
+            activeBridge = bridge;
+
+            if (DetourBackend.Current is RoutingDetourBackend router) {
+                router.ActivateBridge(bridge);
+            }
+        }
+        finally {
             if (lateActivationHandler != null) {
                 AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
                 lateActivationHandler = null;
@@ -119,6 +134,7 @@ public static class RimWorldAdapter {
         patchApplier = null;
         activeBridge = null;
         reflectionLookup = null;
+        lateActivationAttempted = 0;
 
         if (lateActivationHandler != null) {
             AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
@@ -130,6 +146,8 @@ public static class RimWorldAdapter {
             backendBeforeWire = null;
         }
     }
+
+    internal static bool HasLateActivationHandler => lateActivationHandler != null;
 }
 
 internal sealed class WireContext {

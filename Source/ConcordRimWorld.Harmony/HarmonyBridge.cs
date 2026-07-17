@@ -13,6 +13,7 @@ public sealed class HarmonyBridge : IHarmonyBridge
     private readonly HarmonyLib.Harmony harmony;
     private readonly Action<string> log;
     private bool lockUnavailableLogged;
+    private bool foreignOwnersFailureLogged;
 
     internal Action<MethodBase> InstallParticipant;
     internal Action<MethodBase> RemoveParticipant;
@@ -151,21 +152,28 @@ public sealed class HarmonyBridge : IHarmonyBridge
     {
         target = MethodIdentity.Normalize(target);
 
-        Patches patchInfo = PatchProcessor.GetPatchInfo(target);
-        if (patchInfo == null)
+        try
         {
+            if (HarmonyLockScope.Available)
+            {
+                using (HarmonyLockScope.Enter())
+                {
+                    return CollectForeignOwners(target);
+                }
+            }
+
+            return CollectForeignOwners(target);
+        }
+        catch (Exception ex)
+        {
+            if (!foreignOwnersFailureLogged)
+            {
+                foreignOwnersFailureLogged = true;
+                log($"ForeignOwners read failed for {target}: {ex.Message}");
+            }
+
             return Array.Empty<string>();
         }
-
-        HashSet<string> owners = new HashSet<string>();
-        CollectForeignOwners(patchInfo.Prefixes, owners);
-        CollectForeignOwners(patchInfo.Postfixes, owners);
-        CollectForeignOwners(patchInfo.Transpilers, owners);
-        CollectForeignOwners(patchInfo.Finalizers, owners);
-        CollectForeignOwners(patchInfo.InnerPrefixes, owners);
-        CollectForeignOwners(patchInfo.InnerPostfixes, owners);
-
-        return new List<string>(owners);
     }
 
     internal void DisposeHandle(MethodBase target, long[] owned)
@@ -313,6 +321,25 @@ public sealed class HarmonyBridge : IHarmonyBridge
         }
 
         return false;
+    }
+
+    private static IReadOnlyList<string> CollectForeignOwners(MethodBase target)
+    {
+        Patches patchInfo = PatchProcessor.GetPatchInfo(target);
+        if (patchInfo == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        HashSet<string> owners = new HashSet<string>();
+        CollectForeignOwners(patchInfo.Prefixes, owners);
+        CollectForeignOwners(patchInfo.Postfixes, owners);
+        CollectForeignOwners(patchInfo.Transpilers, owners);
+        CollectForeignOwners(patchInfo.Finalizers, owners);
+        CollectForeignOwners(patchInfo.InnerPrefixes, owners);
+        CollectForeignOwners(patchInfo.InnerPostfixes, owners);
+
+        return new List<string>(owners);
     }
 
     private static void CollectForeignOwners(IReadOnlyList<Patch> patches, HashSet<string> owners)

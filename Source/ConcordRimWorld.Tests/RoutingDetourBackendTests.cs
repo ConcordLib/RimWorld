@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using Xunit;
 using Concord.Detour;
@@ -309,6 +310,26 @@ public class RoutingDetourBackendTests
         Assert.Same(inner.ApplyComposedCalls[0].Item1, inner.ApplyComposedCalls[1].Item1);
         Assert.Equal(RouteState.Raw, router.GetRoute(first));
         Assert.Equal(RouteState.Raw, router.GetRoute(second));
+    }
+
+
+    [Fact]
+    public void DescribeTarget_NullDeclaringType_DoesNotThrow()
+    {
+        DynamicMethod dynamicMethod = new DynamicMethod("GlobalMethod", typeof(void), Type.EmptyTypes);
+        ILGenerator il = dynamicMethod.GetILGenerator();
+        il.Emit(OpCodes.Ret);
+
+        Assert.Null(dynamicMethod.DeclaringType);
+
+        MethodInfo describeTarget = typeof(RoutingDetourBackend).GetMethod(
+            "DescribeTarget",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        string description = (string)describeTarget.Invoke(null, new object[] { dynamicMethod });
+
+        Assert.Equal("<module>.GlobalMethod", description);
     }
 
     private class NormalizationTarget

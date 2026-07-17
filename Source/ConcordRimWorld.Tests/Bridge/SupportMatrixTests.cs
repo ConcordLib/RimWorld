@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using Concord;
 using Concord.Emit;
@@ -170,6 +171,33 @@ namespace ConcordRimWorld.Tests.Bridge
             string reason = SupportMatrix.Validate(target, injections, null);
             Assert.NotNull(reason);
             Assert.Contains("GetExecutingAssembly", reason);
+        }
+    }
+
+
+    [Collection("HarmonySerial")]
+    public sealed class SupportMatrixUnknownOpCodeTests
+    {
+        [Fact]
+        public void CallsGetExecutingAssemblyFailsClosedOnUnknownOpCode()
+        {
+            MethodBase target = typeof(SupportMatrixTestTargets).GetMethod(nameof(SupportMatrixTestTargets.SimpleTarget));
+            FieldInfo tableField = typeof(SupportMatrix).GetField("OpCodesByValue", BindingFlags.NonPublic | BindingFlags.Static);
+            Dictionary<short, OpCode> table = (Dictionary<short, OpCode>)tableField.GetValue(null);
+
+            short retValue = OpCodes.Ret.Value;
+            OpCode removed = table[retValue];
+            table.Remove(retValue);
+
+            try
+            {
+                bool calls = SupportMatrix.CallsGetExecutingAssembly(target);
+                Assert.True(calls);
+            }
+            finally
+            {
+                table[retValue] = removed;
+            }
         }
     }
 
