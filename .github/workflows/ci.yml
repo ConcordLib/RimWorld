@@ -75,6 +75,9 @@ jobs:
           PACKAGE_VERSION="${CORE_VERSION#v}"
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld.Harmony/ConcordRimWorld.Harmony.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
 
       - name: Cache NuGet
         uses: actions/cache@v4
@@ -134,9 +137,12 @@ jobs:
           PACKAGE_VERSION="${CORE_VERSION#v}"
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld.Harmony/ConcordRimWorld.Harmony.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj
+          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj Source/ConcordRimWorld/ConcordRimWorld.csproj Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj Source/ConcordRimWorld.Harmony/ConcordRimWorld.Harmony.csproj
           git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
           git push origin HEAD:main
 

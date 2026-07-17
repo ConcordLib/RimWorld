@@ -2,8 +2,13 @@ bin/
 obj/
 *.user
 Current/Assemblies/
+Current/Bridge/
 1.5/Assemblies/
 TestMod/Assemblies/
+test/ingame/ConcordHalfMod/Assemblies/
+test/ingame/HarmonyHalfMod/Assemblies/
+test/ingame/HarmonySecondMod/Assemblies/
+test/ingame/HarmonyBreakerMod/Assemblies/
 
 # local in-game verification notes (kept out of git)
 VERIFICATION.md
