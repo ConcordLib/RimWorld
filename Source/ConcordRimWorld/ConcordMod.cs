@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 using Verse;
 
 namespace Concord.RimWorld;
@@ -19,6 +20,7 @@ public class ConcordMod : Mod {
 
         try {
             CheckLoadOrder(content);
+            ConcordSettings settings = GetSettings<ConcordSettings>();
             RimWorldAdapter.Wire();
             Log.Message("[Concord.RimWorld] Concord runtime wired.");
         } catch (Exception e) {
@@ -90,5 +92,27 @@ public class ConcordMod : Mod {
                 string.Join(", ", before) + "). Concord should load first so its patching runtime is " +
                 "available to every other mod. Move " + selfId + " to the top of the mod list.");
         }
+    }
+
+    public override string SettingsCategory()
+    {
+        return "Concord";
+    }
+
+    public override void DoSettingsWindowContents(Rect inRect)
+    {
+        ConcordSettings settings = GetSettings<ConcordSettings>();
+        Listing_Standard listing = new Listing_Standard();
+        listing.Begin(inRect);
+
+        listing.CheckboxLabeled("Bridge Routing Enabled", ref settings.BridgeRoutingEnabled,
+            "Controls whether Concord's routing bridge is activated (the router always installs)");
+        listing.CheckboxLabeled("Route Everything When Harmony Present", ref settings.RouteEverythingWhenHarmonyPresent,
+            "Opt-in compat mode: route all methods when Harmony is detected");
+
+        listing.Gap();
+        listing.Label("Changes to these settings take effect on the next game launch.");
+
+        listing.End();
     }
 }
