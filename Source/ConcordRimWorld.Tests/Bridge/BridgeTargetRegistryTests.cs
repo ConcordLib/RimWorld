@@ -32,14 +32,10 @@ public class BridgeTargetRegistryTests
 
     private static Injection MakeInjection(string owner, int priority = 0, IReadOnlyList<string> beforeOwners = null)
     {
-        Injection injection = new Injection(TargetMethod(), new InjectAt.Head(), owner, priority);
-        if (beforeOwners != null)
+        return new Injection(TargetMethod(), new InjectAt.Head(), owner, priority)
         {
-            PropertyInfo property = typeof(Injection).GetProperty(nameof(Injection.BeforeOwners));
-            property.SetValue(injection, beforeOwners);
-        }
-
-        return injection;
+            BeforeOwners = beforeOwners ?? [],
+        };
     }
 
     [Fact]
