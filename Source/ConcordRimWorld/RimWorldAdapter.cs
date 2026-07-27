@@ -12,7 +12,7 @@ namespace Concord.RimWorld;
 public static class RimWorldAdapter {
     private static bool wired;
     private static RimWorldPatchApplier patchApplier;
-    private static volatile IHarmonyBridge activeBridge;
+    private static volatile IForeignPatchHost activeBridge;
     private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
     private static AssemblyLoadEventHandler lateActivationHandler;
     private static int lateActivationAttempted;
@@ -52,15 +52,13 @@ public static class RimWorldAdapter {
 
         router.RouteEverything = context.Settings.RouteEverythingWhenHarmonyPresent;
 
-        using (router.EagerScope()) {
-            context.ApplyEagerTier();
-        }
+        context.ApplyEagerTier();
 
         if (context.Settings.BridgeRoutingEnabled) {
-            IHarmonyBridge bridge = context.LoadBridge(context.ModRootDir, context.Log);
+            IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
             if (bridge != null) {
                 activeBridge = bridge;
-                router.ActivateBridge(bridge);
+                router.ActivateHost(bridge);
             } else {
                 lateActivationHandler = (sender, args) => {
                     if (activeBridge != null) {
@@ -84,7 +82,7 @@ public static class RimWorldAdapter {
         }
 
         Func<MethodBase, IReadOnlyList<string>> lookup = target => {
-            IHarmonyBridge bridge = activeBridge;
+            IForeignPatchHost bridge = activeBridge;
             if (bridge != null) {
                 return bridge.ForeignOwners(target);
             }
@@ -93,14 +91,19 @@ public static class RimWorldAdapter {
             return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
         };
 
-        ContentionWatcher watcher = new ContentionWatcher(router.RawPinnedTargets, lookup, context.Log, context.DialogOnce);
+        ContentionWatcher watcher = new ContentionWatcher(
+            router.RawPinnedTargets,
+            router.ContestedLostTargets,
+            lookup,
+            () => router.NotifierInstalled,
+            context.Log,
+            context.DialogOnce);
 
+        // Patches now apply as they arrive, so there is no queue to drain. The watcher stays as a
+        // backstop for the case where the notifier hook could not install.
         context.Schedule(() => {
             watcher.RunCheckpoint();
-            context.Schedule(() => {
-                router.Flush();
-                watcher.RunCheckpoint();
-            });
+            context.Schedule(watcher.RunCheckpoint);
         });
     }
 
@@ -110,7 +113,7 @@ public static class RimWorldAdapter {
         }
 
         try {
-            IHarmonyBridge bridge = context.LoadBridge(context.ModRootDir, context.Log);
+            IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
             if (bridge == null) {
                 return;
             }
@@ -118,7 +121,7 @@ public static class RimWorldAdapter {
             activeBridge = bridge;
 
             if (DetourBackend.Current is RoutingDetourBackend router) {
-                router.ActivateBridge(bridge);
+                router.ActivateHost(bridge);
             }
         }
         finally {
@@ -154,7 +157,7 @@ internal sealed class WireContext {
     public ConcordSettings Settings;
     public string ModRootDir;
     public Action<Action> Schedule;
-    public Func<string, Action<string>, IHarmonyBridge> LoadBridge;
+    public Func<string, Action<string>, IForeignPatchHost> LoadBridge;
     public Action<string> Log;
     public Action<string> DialogOnce;
     public Action ApplyEagerTier;

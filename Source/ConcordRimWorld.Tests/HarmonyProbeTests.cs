@@ -1,3 +1,4 @@
+using Concord.Detour;
 using System;
 using System.IO;
 using System.Reflection;
@@ -43,7 +44,7 @@ public class HarmonyProbeTests
         File.WriteAllText(Path.Combine(bridgeDir, "ConcordRimWorld.Harmony.dll"), "dummy");
 
         string logOutput = null;
-        IHarmonyBridge result = HarmonyProbe.TryLoadBridge(
+        IForeignPatchHost result = HarmonyProbe.TryLoadBridge(
             tempRoot,
             log => logOutput = log,
             () => Array.FindAll(
@@ -70,7 +71,7 @@ public class HarmonyProbeTests
         Directory.CreateDirectory(tempRoot);
 
         string logOutput = null;
-        IHarmonyBridge result = HarmonyProbe.TryLoadBridge(
+        IForeignPatchHost result = HarmonyProbe.TryLoadBridge(
             tempRoot,
             log => logOutput = log,
             () => AppDomain.CurrentDomain.GetAssemblies()
@@ -172,7 +173,7 @@ public class HarmonyProbeTests
         string repoRoot = ResolveRepoRoot();
         string logOutput = null;
 
-        IHarmonyBridge bridge = HarmonyProbe.TryLoadBridge(
+        IForeignPatchHost bridge = HarmonyProbe.TryLoadBridge(
             repoRoot,
             log => logOutput = log,
             () => AppDomain.CurrentDomain.GetAssemblies()

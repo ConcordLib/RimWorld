@@ -31,21 +31,57 @@ internal class FakeInner : IDetourBackend
     }
 }
 
-internal class FakeBridge : IHarmonyBridge
+internal class FakeBridge : IForeignPatchHost
 {
-    private readonly Queue<BridgeRouteResult> results = new Queue<BridgeRouteResult>();
+    private readonly Queue<ForeignRouteResult> results = new Queue<ForeignRouteResult>();
+    private readonly Queue<ForeignRouteResult> routeIntoResults = new Queue<ForeignRouteResult>();
 
     public int TryRouteCallCount;
     public int ApplyToRoutedCallCount;
+    public int RouteIntoCallCount;
     public bool LastForceRoute;
+    public object LastHostPatchState;
+    public string ValidateRouteReason;
+    public bool NotifierInstalls = true;
+    public IForeignPatchObserver InstalledObserver;
     public Func<MethodBase, IReadOnlyList<string>> ForeignOwnersFunc;
 
-    public void Enqueue(BridgeRouteResult result)
+    public void Enqueue(ForeignRouteResult result)
     {
         results.Enqueue(result);
     }
 
-    public BridgeRouteResult TryRoute(MethodBase target, IReadOnlyList<Injection> added, bool forceRoute)
+    public void EnqueueRouteInto(ForeignRouteResult result)
+    {
+        routeIntoResults.Enqueue(result);
+    }
+
+    public IDisposable EnterHostLock()
+    {
+        return null;
+    }
+
+    public string ValidateRoute(MethodBase target, IReadOnlyList<Injection> added)
+    {
+        return ValidateRouteReason;
+    }
+
+    public ForeignRouteResult RouteInto(MethodBase target, IReadOnlyList<Injection> added, object hostPatchState)
+    {
+        RouteIntoCallCount++;
+        LastHostPatchState = hostPatchState;
+        return routeIntoResults.Count > 0
+            ? routeIntoResults.Dequeue()
+            : ForeignRouteResult.Routed(new FakeHandle { Original = target });
+    }
+
+    public bool TryInstallNotifier(IForeignPatchObserver observer, IDetourBackend rawBackend)
+    {
+        InstalledObserver = observer;
+        return NotifierInstalls;
+    }
+
+    public ForeignRouteResult TryRoute(MethodBase target, IReadOnlyList<Injection> added, bool forceRoute)
     {
         TryRouteCallCount++;
         LastForceRoute = forceRoute;

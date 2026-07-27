@@ -31,7 +31,7 @@ public class AdapterWiringTests
         FakeInner inner,
         List<string> log,
         List<Action> scheduled,
-        Func<string, Action<string>, IHarmonyBridge> loadBridge,
+        Func<string, Action<string>, IForeignPatchHost> loadBridge,
         bool bridgeRoutingEnabled,
         bool routeEverything)
     {
@@ -56,7 +56,7 @@ public class AdapterWiringTests
     }
 
     [Fact]
-    public void Wire_InstallsRouterRunsEagerTierAndSchedulesCheckpointsAndFlush()
+    public void Wire_InstallsRouterRunsOwnPatchesAndSchedulesCheckpoints()
     {
         FakeInner inner = new FakeInner();
         DetourBackend.Current = inner;
@@ -79,7 +79,8 @@ public class AdapterWiringTests
             IReadOnlyList<Injection> consumerInjection = new List<Injection> { MakeInjection(consumerTarget) };
             IDetourHandle consumerHandle = router.ApplyComposed(consumerTarget, consumerInjection);
 
-            Assert.Equal(1, inner.ApplyComposedCallCount);
+            // No queue any more: a consumer patch reaches the inner backend as soon as it is applied.
+            Assert.Equal(2, inner.ApplyComposedCallCount);
             Assert.NotNull(consumerHandle);
 
             Assert.Single(scheduled);
@@ -89,10 +90,12 @@ public class AdapterWiringTests
             checkpointOne();
 
             Assert.Single(scheduled);
-            Assert.Equal(1, inner.ApplyComposedCallCount);
+            Assert.Equal(2, inner.ApplyComposedCallCount);
 
-            Action flushAndCheckpointTwo = scheduled[0];
-            flushAndCheckpointTwo();
+            // Both checkpoints now only run the contention watcher; there is no queue left to drain,
+            // so neither one applies anything.
+            Action checkpointTwo = scheduled[0];
+            checkpointTwo();
 
             Assert.Equal(2, inner.ApplyComposedCallCount);
         }
@@ -124,9 +127,13 @@ public class AdapterWiringTests
 
             FakeBridge lateBridge = new FakeBridge
             {
-                ForeignOwnersFunc = _ => new List<string> { "foreign.mod" }.AsReadOnly()
+                ForeignOwnersFunc = _ => new List<string> { "foreign.mod" }.AsReadOnly(),
+
+                // The watcher only sweeps raw pins when the notifier could not install. With the hook
+                // active this method would have been promoted instead of reported.
+                NotifierInstalls = false
             };
-            lateBridge.Enqueue(BridgeRouteResult.NotContested());
+            lateBridge.Enqueue(ForeignRouteResult.NotContested());
 
             context.LoadBridge = (root, l) => lateBridge;
             RimWorldAdapter.TryLateActivation(context);
@@ -180,7 +187,7 @@ public class AdapterWiringTests
         List<Action> scheduled = new List<Action>();
         int loadBridgeCallCount = 0;
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
 
         try
         {
@@ -195,7 +202,6 @@ public class AdapterWiringTests
             Assert.False(RimWorldAdapter.HasLateActivationHandler);
 
             RoutingDetourBackend router = (RoutingDetourBackend)DetourBackend.Current;
-            router.Flush();
 
             MethodBase target = typeof(AdapterWiringTests).GetMethod(
                 nameof(RoutedTarget), BindingFlags.NonPublic | BindingFlags.Static);
@@ -264,16 +270,18 @@ public class AdapterWiringTests
 
             FakeBridge lateBridge = new FakeBridge
             {
-                ForeignOwnersFunc = _ => new List<string> { "late.owner" }.AsReadOnly()
+                ForeignOwnersFunc = _ => new List<string> { "late.owner" }.AsReadOnly(),
+
+                // As above: this asserts the watcher's lookup switches to the bridge, which only
+                // sweeps raw pins on the no-hook path.
+                NotifierInstalls = false
             };
-            lateBridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+            lateBridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
 
             context.LoadBridge = (root, l) => lateBridge;
 
             RimWorldAdapter.TryLateActivation(context);
             Assert.False(RimWorldAdapter.HasLateActivationHandler);
-
-            router.Flush();
 
             MethodBase lateTarget = typeof(AdapterWiringTests).GetMethod(
                 nameof(LateTarget), BindingFlags.NonPublic | BindingFlags.Static);
@@ -318,7 +326,7 @@ public class AdapterWiringTests
 
             int loadBridgeCallCount = 0;
             FakeBridge lateBridge = new FakeBridge();
-            lateBridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+            lateBridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
 
             context.LoadBridge = (root, l) => {
                 loadBridgeCallCount++;

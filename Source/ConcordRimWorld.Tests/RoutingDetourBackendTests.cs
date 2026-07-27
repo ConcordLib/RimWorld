@@ -14,9 +14,7 @@ public class RoutingDetourBackendTests
 {
     private static RoutingDetourBackend NewRouter(IDetourBackend inner, List<string> log)
     {
-        RoutingDetourBackend router = new RoutingDetourBackend(inner, log.Add);
-        router.Flush();
-        return router;
+        return new RoutingDetourBackend(inner, log.Add);
     }
 
     private static MethodBase TargetMethod()
@@ -63,10 +61,10 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.NotContested());
+        bridge.Enqueue(ForeignRouteResult.NotContested());
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
@@ -83,17 +81,23 @@ public class RoutingDetourBackendTests
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
         FakeHandle scriptedHandle = new FakeHandle();
-        bridge.Enqueue(BridgeRouteResult.Routed(scriptedHandle));
+        bridge.Enqueue(ForeignRouteResult.Routed(scriptedHandle));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
         IDetourHandle handle = router.ApplyComposed(target, added);
 
         Assert.Equal(0, inner.ApplyComposedCallCount);
-        Assert.Same(scriptedHandle, handle);
+
+        // The router hands back a stable wrapper, not the host's handle, so a later promotion can swap
+        // the detour underneath a reference the caller already holds. Assert delegation, not identity.
+        Assert.True(handle.IsApplied);
+        Assert.Equal(0, scriptedHandle.DisposeCallCount);
+        handle.Dispose();
+        Assert.Equal(1, scriptedHandle.DisposeCallCount);
         Assert.Equal(RouteState.Bridge, router.GetRoute(target));
         Assert.Contains(log, line => line.Contains(CoexistenceLogMarkers.RoutedContested));
     }
@@ -110,8 +114,8 @@ public class RoutingDetourBackendTests
         router.ApplyComposed(target, added);
 
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
-        router.ActivateBridge(bridge);
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
+        router.ActivateHost(bridge);
 
         router.ApplyComposed(target, added);
 
@@ -125,10 +129,10 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Rejected("no-ctor-around"));
+        bridge.Enqueue(ForeignRouteResult.Rejected("no-ctor-around"));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
@@ -151,10 +155,10 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
@@ -182,8 +186,8 @@ public class RoutingDetourBackendTests
         Assert.Equal(RouteState.Raw, router.GetRoute(target));
 
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
-        router.ActivateBridge(bridge);
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
+        router.ActivateHost(bridge);
 
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
         router.ApplyComposed(target, added);
@@ -198,10 +202,10 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
         router.ApplyComposed(target, added);
@@ -219,10 +223,10 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.Rejected("no-ctor-around"));
+        bridge.Enqueue(ForeignRouteResult.Rejected("no-ctor-around"));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
         Assert.Throws<InvalidOperationException>(() => router.ApplyComposed(target, added));
@@ -240,11 +244,11 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.NotContested());
+        bridge.Enqueue(ForeignRouteResult.NotContested());
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
         router.RouteEverything = true;
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
@@ -258,11 +262,11 @@ public class RoutingDetourBackendTests
     {
         FakeInner inner = new FakeInner();
         FakeBridge bridge = new FakeBridge();
-        bridge.Enqueue(BridgeRouteResult.NotContested());
-        bridge.Enqueue(BridgeRouteResult.Routed(new FakeHandle()));
+        bridge.Enqueue(ForeignRouteResult.NotContested());
+        bridge.Enqueue(ForeignRouteResult.Routed(new FakeHandle()));
         List<string> log = new List<string>();
         RoutingDetourBackend router = NewRouter(inner, log);
-        router.ActivateBridge(bridge);
+        router.ActivateHost(bridge);
         MethodBase rawTarget = TargetMethod();
         MethodBase bridgeTarget = typeof(RoutingDetourBackendTests).GetMethod(
             nameof(OtherTarget),

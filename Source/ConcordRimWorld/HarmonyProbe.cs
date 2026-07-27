@@ -1,3 +1,4 @@
+using Concord.Detour;
 using System;
 using System.IO;
 using System.Reflection;
@@ -6,7 +7,7 @@ namespace Concord.RimWorld;
 
 public static class HarmonyProbe
 {
-    internal const string BridgeRelativePath = "Current/Bridge/ConcordRimWorld.Harmony.dll";
+    internal const string BridgeRelativePath = "Current/Bridge/Concord.Harmony.dll";
 
     public static bool HarmonyPresent(Func<Assembly[]> loadedAssemblies)
     {
@@ -14,12 +15,12 @@ public static class HarmonyProbe
         return Array.Exists(assemblies, a => a.GetName().Name == "0Harmony");
     }
 
-    public static IHarmonyBridge TryLoadBridge(string modRootDir, Action<string> log)
+    public static IForeignPatchHost TryLoadBridge(string modRootDir, Action<string> log)
     {
         return TryLoadBridge(modRootDir, log, () => AppDomain.CurrentDomain.GetAssemblies());
     }
 
-    internal static IHarmonyBridge TryLoadBridge(string modRootDir, Action<string> log, Func<Assembly[]> loadedAssemblies)
+    internal static IForeignPatchHost TryLoadBridge(string modRootDir, Action<string> log, Func<Assembly[]> loadedAssemblies)
     {
         if (!HarmonyPresent(loadedAssemblies))
         {
@@ -27,7 +28,7 @@ public static class HarmonyProbe
             return null;
         }
 
-        string bridgePath = Path.Combine(modRootDir, "Current", "Bridge", "ConcordRimWorld.Harmony.dll");
+        string bridgePath = Path.Combine(modRootDir, "Current", "Bridge", "Concord.Harmony.dll");
 
         if (!File.Exists(bridgePath))
         {
@@ -53,7 +54,7 @@ public static class HarmonyProbe
             Type bridgeType = null;
             foreach (Type type in bridgeAssembly.GetTypes())
             {
-                if (typeof(IHarmonyBridge).IsAssignableFrom(type) && !type.IsInterface)
+                if (typeof(IForeignPatchHost).IsAssignableFrom(type) && !type.IsInterface)
                 {
                     bridgeType = type;
                     break;
@@ -62,11 +63,11 @@ public static class HarmonyProbe
 
             if (bridgeType == null)
             {
-                log("No IHarmonyBridge implementation found in bridge assembly.");
+                log("No IForeignPatchHost implementation found in bridge assembly.");
                 return null;
             }
 
-            IHarmonyBridge bridge = (IHarmonyBridge)Activator.CreateInstance(bridgeType, new object[] { log });
+            IForeignPatchHost bridge = (IForeignPatchHost)Activator.CreateInstance(bridgeType, new object[] { log });
 
             log($"{CoexistenceLogMarkers.BridgeActive} {harmonyVersion}");
 
