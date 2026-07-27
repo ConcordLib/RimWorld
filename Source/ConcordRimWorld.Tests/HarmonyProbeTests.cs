@@ -190,7 +190,9 @@ public class HarmonyProbeTests
         string current = Path.GetDirectoryName(codeBase.LocalPath);
         while (current != null)
         {
-            string candidate = Path.Combine(current, "Current", "Bridge", "ConcordRimWorld.Harmony.dll");
+            // Derived from the probe's own constant rather than repeated here, so renaming the
+            // staged bridge cannot silently leave this walking for a file that no longer exists.
+            string candidate = Path.Combine(current, HarmonyProbe.BridgeRelativePath.Replace('/', Path.DirectorySeparatorChar));
             if (File.Exists(candidate))
             {
                 return current;
