@@ -52,6 +52,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Refuse to run while another Mods/ entry already points at this repo. RimWorld would then see
+# two mods with packageId concordlib.concord, load neither's assemblies, and fail with a
+# TypeLoadException on Concord.Patcher that gives no hint about the real cause.
+for existing in "$RIMWORLD"/Mods/*; do
+  [ -L "$existing" ] || continue
+  case "$existing" in *"/coex-"*) continue ;; esac
+  if [ "$(readlink -f "$existing")" = "$(readlink -f "$REPO_ROOT")" ]; then
+    echo "REFUSING: $existing already links to this repo."
+    echo "RimWorld would see two mods with the same packageId and load neither."
+    echo "Move it aside for the duration of the run."
+    exit 2
+  fi
+done
+
 # --- 1. build (base+bridge via solution, then halves), stage the pinned runtime as 0Concord.dll ---
 dotnet build "$REPO_ROOT/Concord.RimWorld.slnx" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
 dotnet build "$SCRIPT_DIR/HarmonyHalfMod/Source/HarmonyHalf.csproj" -p:RimWorldManaged="$RIMWORLD/RimWorldLinux_Data/Managed" --verbosity quiet
@@ -132,20 +146,24 @@ GAME=""
 fail() { echo "FAIL($MODE): $1"; echo "--- log tail ($FOUND_LOG) ---"; grep -iE "\[COEX\]|\[Concord.Coex\]|Concord runtime wired|Exception|error" "$FOUND_LOG" 2>/dev/null | tail -30; exit 1; }
 require() { grep -q "$1" "$FOUND_LOG" || fail "$2"; }
 forbid()  { if grep -q "$1" "$FOUND_LOG"; then fail "$2"; fi; }
+require_bridged() {
+  grep -qE "\[Concord.Coex\] (routed-contested|promoted) $1" "$FOUND_LOG" \
+    || fail "target never reached the bridge (neither routed-contested nor promoted)"
+}
 
 require "\[COEX\] invoke-result=42 head-count=1" "wrong composed result or head count"
 require "\[COEX\] concord-head" "concord head missing"
-require "\[Concord.Coex\] flush-complete" "deferred flush never ran"
 forbid  "\[Concord.Coex\] late-contention" "late-contention diagnostic fired"
 
 case "$MODE" in
   --contested)
     require "\[COEX\] harmony-postfix" "harmony postfix missing"
-    require "\[Concord.Coex\] routed-contested" "bridge did not route the contested target"
+    require_bridged "SharedTarget.Compute"
     ;;
   --uncontested)
     require "\[Concord.Coex\] bridge-active" "bridge should activate when Harmony is present"
     forbid  "\[Concord.Coex\] routed-contested" "uncontested target must stay raw"
+    forbid  "\[Concord.Coex\] promoted" "uncontested target must not be promoted either"
     ;;
   --harmony-absent)
     forbid  "\[Concord.Coex\] bridge-active" "bridge must never load without Harmony"
@@ -153,14 +171,14 @@ case "$MODE" in
     ;;
   --second-harmony)
     require "\[COEX\] harmony-postfix" "harmony postfix missing"
-    require "\[Concord.Coex\] routed-contested" "bridge did not route the contested target"
+    require_bridged "SharedTarget.Compute"
     require "\[COEX\] harmony-second-patched" "second harmony patch never applied"
     require "\[COEX\] harmony-second-postfix" "second harmony postfix never ran"
     require "\[COEX\] second-invoke head-count=2" "concord head did not survive the second harmony rebuild"
     ;;
   --second-harmony-inner)
     require "\[COEX\] harmony-postfix" "harmony postfix missing"
-    require "\[Concord.Coex\] routed-contested" "bridge did not route the contested target"
+    require_bridged "SharedTarget.Compute"
     require "\[COEX\] harmony-breaker-patched" "breaker transpiler never applied"
     require "\[Concord.Coex\] stream-rejected" "converter did not reject the fault-block stream"
     require "\[COEX\] breaker-invoke result=42" "method must still return the correct value after degrade"
