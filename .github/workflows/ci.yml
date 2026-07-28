@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # blame data for the SonarCloud scan below
 
       - name: Free runner disk space
         run: |
@@ -91,6 +93,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mono-complete
 
+      # SonarCloud wraps the build below, but only on the 1.6 cell: both matrix cells compile the
+      # same sources, so scanning each would submit two reports for one commit and the second
+      # would overwrite the first. The 1.5 cell builds normally because `begin` never ran there.
+      - name: Setup Java for the scanner
+        if: matrix.rw == '1.6'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install scanner
+        if: matrix.rw == '1.6'
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Sonar begin
+        if: matrix.rw == '1.6'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet sonarscanner begin \
+            /k:"ConcordLib_RimWorld" \
+            /o:"concordlib" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.scanner.scanAll=false \
+            /d:sonar.qualitygate.wait=true
+
       - name: Build
         run: |
           set -euo pipefail
@@ -103,6 +133,13 @@ jobs:
           RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
           TESTDLL=$(find Source/ConcordRimWorld.Tests/bin/Release -name ConcordRimWorld.Tests.dll | head -1)
           mono "$RUNNER" "$TESTDLL"
+
+      # Placed after the tests so a red gate fails the job only once the suite has had its say.
+      - name: Sonar end
+        if: matrix.rw == '1.6'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
   release:
     name: Release
