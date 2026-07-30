@@ -1,0 +1,75 @@
+using System;
+using System.Reflection;
+using RimWorld;
+using UnityEngine;
+using Verse;
+
+namespace Concord.RimWorld;
+
+/// <summary>
+///     Draws Concord's versions in the main menu corner, under the readout RimWorld already shows.
+/// </summary>
+/// <remarks>
+///     <para>
+///         This patches <see cref="MainMenuDrawer.MainMenuOnGUI" />, the method that calls
+///         <c>DrawInfoInCorner</c>, rather than the readout itself. Harmony's mod patches
+///         <c>DrawInfoInCorner</c> to add its own label, and a Concord patch on that same method
+///         displaces Harmony's. Staying one level up keeps both readouts.
+///     </para>
+///     <para>
+///         Harmony draws its label at a hard-coded y that assumes the vanilla block is two lines tall.
+///         Concord takes the line below Harmony's when Harmony is loaded, and Harmony's own slot when
+///         it is not.
+///     </para>
+/// </remarks>
+[Patch(typeof(MainMenuDrawer))]
+public abstract class VersionReadout {
+    private const string HarmonyLabelType = "HarmonyMod.VersionControl_DrawInfoInCorner_Patch";
+    private const float LabelX = 10f;
+    private const float HarmonyLabelY = 58f;
+
+    private static string line;
+    private static bool? harmonyPresent;
+
+    /// <summary>Draws the Concord line after RimWorld has drawn the rest of the main menu.</summary>
+    /// <param name="ch">The Concord control handle for the void target.</param>
+    [Inject(At.Tail, nameof(MainMenuDrawer.MainMenuOnGUI))]
+    public static void DrawConcordVersion(ControlHandle ch) {
+        try {
+            Text.Font = GameFont.Small;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+
+            Vector2 size = Text.CalcSize(Line);
+            float y = HarmonyPresent ? HarmonyLabelY + size.y : HarmonyLabelY;
+            Widgets.Label(new Rect(LabelX, y, size.x, size.y), Line);
+
+            GUI.color = Color.white;
+        } catch (Exception) { // NOSONAR a draw failure must never take the main menu down with it
+            GUI.color = Color.white;
+        }
+    }
+
+    private static bool HarmonyPresent => harmonyPresent ??= ResolveHarmonyLabel();
+
+    private static string Line => line ??= "Concord v" + Read(typeof(VersionReadout).Assembly) + " (v" + Read(typeof(Patcher).Assembly) + ")";
+
+    private static bool ResolveHarmonyLabel() {
+        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()) {
+            if (assembly.GetType(HarmonyLabelType, false) != null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string Read(Assembly assembly) {
+        string version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (string.IsNullOrEmpty(version)) {
+            return assembly.GetName().Version?.ToString() ?? "unknown";
+        }
+
+        int metadata = version.IndexOf('+');
+        return metadata < 0 ? version : version.Substring(0, metadata);
+    }
+}
