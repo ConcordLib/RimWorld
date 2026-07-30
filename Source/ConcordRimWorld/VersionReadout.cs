@@ -28,6 +28,10 @@ public abstract class VersionReadout {
     private const float LabelX = 10f;
     private const float HarmonyLabelY = 58f;
 
+    // Harmony's label box is a full line tall but its glyphs do not fill it, so stepping a whole
+    // line leaves a visible gap. Three quarters of a line closes about half of it.
+    private const float LineStep = 0.75f;
+
     private static string line;
     private static bool? harmonyPresent;
 
@@ -40,7 +44,7 @@ public abstract class VersionReadout {
             GUI.color = new Color(1f, 1f, 1f, 0.5f);
 
             Vector2 size = Text.CalcSize(Line);
-            float y = HarmonyPresent ? HarmonyLabelY + size.y : HarmonyLabelY;
+            float y = HarmonyPresent ? HarmonyLabelY + (size.y * LineStep) : HarmonyLabelY;
             Widgets.Label(new Rect(LabelX, y, size.x, size.y), Line);
 
             GUI.color = Color.white;
