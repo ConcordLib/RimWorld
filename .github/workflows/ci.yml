@@ -238,16 +238,49 @@ jobs:
       # is restored with restore-keys, so its newest Concord.Runtime is whatever an earlier run
       # happened to leave there. That shipped a 0.9.0 runtime for four releases while the adapter
       # moved on, and any mod compiled against a later Core failed to load against it.
+      # Core dispatches a release roughly thirty seconds after publishing, and nuget.org takes
+      # minutes to serve a new version, so the wanted version is routinely missing on the first
+      # look. Retry rather than fail the release.
       - name: Stage the shipped runtime dll
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
         run: |
           set -euo pipefail
-          LATEST=$(curl -sSf https://api.nuget.org/v3-flatcontainer/concord.runtime/index.json \
-            | jq -r '[.versions[] | select(contains("-") | not)] | last')
-          test -n "$LATEST" && test "$LATEST" != "null" || { echo "Could not resolve the latest Concord.Runtime from nuget.org." >&2; exit 1; }
-          echo "Staging Concord.Runtime $LATEST"
-          curl -sSf "https://api.nuget.org/v3-flatcontainer/concord.runtime/$LATEST/concord.runtime.$LATEST.nupkg" -o /tmp/concord.runtime.nupkg
+          WANT="${CORE_VERSION#v}"
+          INDEX=https://api.nuget.org/v3-flatcontainer/concord.runtime/index.json
+          VERSION=""
+          for attempt in $(seq 1 20); do
+            BODY=$(curl -sS "$INDEX" 2>/dev/null || true)
+            if [ -n "$BODY" ]; then
+              if [ -n "$WANT" ]; then
+                if printf '%s' "$BODY" | jq -e --arg v "$WANT" '.versions | index($v) != null' >/dev/null 2>&1; then
+                  VERSION="$WANT"
+                  break
+                fi
+              else
+                VERSION=$(printf '%s' "$BODY" | jq -r '[.versions[] | select(contains("-") | not)] | last')
+                if [ -n "$VERSION" ] && [ "$VERSION" != "null" ]; then
+                  break
+                fi
+                VERSION=""
+              fi
+            fi
+            echo "Concord.Runtime ${WANT:-latest} is not on nuget.org yet; retrying in 15s ($attempt/20)"
+            sleep 15
+          done
+          test -n "$VERSION" || { echo "Concord.Runtime ${WANT:-latest} never appeared on nuget.org." >&2; exit 1; }
+
+          echo "Staging Concord.Runtime $VERSION"
+          for attempt in $(seq 1 5); do
+            curl -sSf "https://api.nuget.org/v3-flatcontainer/concord.runtime/$VERSION/concord.runtime.$VERSION.nupkg" \
+              -o /tmp/concord.runtime.nupkg && break
+            echo "Download failed; retrying in 10s ($attempt/5)"
+            sleep 10
+          done
+          test -s /tmp/concord.runtime.nupkg || { echo "Could not download Concord.Runtime $VERSION." >&2; exit 1; }
+
           unzip -p /tmp/concord.runtime.nupkg 'lib/net472/Concord.dll' > Current/Assemblies/0Concord.dll
-          test -s Current/Assemblies/0Concord.dll || { echo "Concord.Runtime $LATEST ships no lib/net472/Concord.dll." >&2; exit 1; }
+          test -s Current/Assemblies/0Concord.dll || { echo "Concord.Runtime $VERSION ships no lib/net472/Concord.dll." >&2; exit 1; }
 
       - name: Install semantic-release
         run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
