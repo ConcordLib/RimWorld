@@ -234,12 +234,20 @@ jobs:
           DLLDIR=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")
           dotnet build Concord.RimWorld.slnx -c Release -p:RimWorldManaged="$DLLDIR"
 
+      # Fetch the runtime straight from nuget.org rather than reading ~/.nuget/packages. The cache
+      # is restored with restore-keys, so its newest Concord.Runtime is whatever an earlier run
+      # happened to leave there. That shipped a 0.9.0 runtime for four releases while the adapter
+      # moved on, and any mod compiled against a later Core failed to load against it.
       - name: Stage the shipped runtime dll
         run: |
           set -euo pipefail
-          RUNTIME=$(find ~/.nuget/packages/concord.runtime -path '*net472/Concord.dll' | sort -V | tail -1)
-          test -n "$RUNTIME" || { echo "No net472 Concord.Runtime in the NuGet cache: the pinned Concord.Runtime version predates lib/net472. Bump the pin in Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj to a release that ships it." >&2; exit 1; }
-          cp "$RUNTIME" Current/Assemblies/0Concord.dll
+          LATEST=$(curl -sSf https://api.nuget.org/v3-flatcontainer/concord.runtime/index.json \
+            | jq -r '[.versions[] | select(contains("-") | not)] | last')
+          test -n "$LATEST" && test "$LATEST" != "null" || { echo "Could not resolve the latest Concord.Runtime from nuget.org." >&2; exit 1; }
+          echo "Staging Concord.Runtime $LATEST"
+          curl -sSf "https://api.nuget.org/v3-flatcontainer/concord.runtime/$LATEST/concord.runtime.$LATEST.nupkg" -o /tmp/concord.runtime.nupkg
+          unzip -p /tmp/concord.runtime.nupkg 'lib/net472/Concord.dll' > Current/Assemblies/0Concord.dll
+          test -s Current/Assemblies/0Concord.dll || { echo "Concord.Runtime $LATEST ships no lib/net472/Concord.dll." >&2; exit 1; }
 
       - name: Install semantic-release
         run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
