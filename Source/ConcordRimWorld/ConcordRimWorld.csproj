@@ -28,19 +28,17 @@
     <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
     <!-- 0.12.0 matches the runtime staged into Current/Assemblies/0Concord.dll and is the first
          release carrying At.Argument, which VersionReadoutPatch uses. -->
-    <PackageReference Include="Concord.Ref" Version="0.12.0" PrivateAssets="all" />
+    <PackageReference Include="Concord.Ref" Version="0.14.0" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
          RimWorld does not scan Current/Bridge for mod assemblies. -->
-    <PackageReference Include="Concord.Harmony" Version="0.9.0" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Harmony" Version="0.14.0" GeneratePathProperty="true" ExcludeAssets="all" />
   </ItemGroup>
 
   <!-- HarmonyProbe loads Current/Bridge/Concord.Harmony.dll by path after it finds a
        supported Harmony, so the package's net472 asset has to land there. -->
   <Target Name="StageHarmonyHost" AfterTargets="Build">
-    <Copy SourceFiles="$(PkgConcord_Harmony)/lib/net472/Concord.Harmony.dll"
-          DestinationFolder="$(MSBuildThisFileDirectory)../../Current/Bridge"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(PkgConcord_Harmony)/lib/net472/Concord.Harmony.dll" DestinationFolder="$(MSBuildThisFileDirectory)../../Current/Bridge" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
