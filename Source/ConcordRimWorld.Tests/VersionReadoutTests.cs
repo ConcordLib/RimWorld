@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using Xunit;
 
 namespace Concord.RimWorld.Tests;
@@ -7,9 +6,7 @@ namespace Concord.RimWorld.Tests;
 public sealed class VersionReadoutTests {
     [Fact]
     public void Line_NamesBothAssemblies() {
-        string line = (string)typeof(VersionReadout)
-            .GetProperty("Line", BindingFlags.NonPublic | BindingFlags.Static)
-            .GetValue(null);
+        string line = VersionInfo.Line;
 
         Assert.StartsWith("Concord v", line, StringComparison.Ordinal);
         Assert.Contains(" (v", line, StringComparison.Ordinal);

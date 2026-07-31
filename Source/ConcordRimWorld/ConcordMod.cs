@@ -9,6 +9,8 @@ namespace Concord.RimWorld;
 
 public class ConcordMod : Mod {
     public ConcordMod(ModContentPack content) : base(content) {
+        Log.Message("[Concord.RimWorld] Concord v" + VersionInfo.Adapter + " loading (runtime v" + VersionInfo.Runtime + ").");
+
         if (ShippedConcordCannotLoad()) {
             Log.Error(
                 "[Concord.RimWorld] The shipped Concord runtime depends on System.Reflection.Emit " +

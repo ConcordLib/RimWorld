@@ -32,7 +32,6 @@ public abstract class VersionReadout {
     // line leaves a visible gap. Three quarters of a line closes about half of it.
     private const float LineStep = 0.75f;
 
-    private static string line;
     private static bool? harmonyPresent;
 
     /// <summary>Draws the Concord line after RimWorld has drawn the rest of the main menu.</summary>
@@ -43,9 +42,9 @@ public abstract class VersionReadout {
             Text.Font = GameFont.Small;
             GUI.color = new Color(1f, 1f, 1f, 0.5f);
 
-            Vector2 size = Text.CalcSize(Line);
+            Vector2 size = Text.CalcSize(VersionInfo.Line);
             float y = HarmonyPresent ? HarmonyLabelY + (size.y * LineStep) : HarmonyLabelY;
-            Widgets.Label(new Rect(LabelX, y, size.x, size.y), Line);
+            Widgets.Label(new Rect(LabelX, y, size.x, size.y), VersionInfo.Line);
 
             GUI.color = Color.white;
         } catch (Exception) { // NOSONAR a draw failure must never take the main menu down with it
@@ -55,8 +54,6 @@ public abstract class VersionReadout {
 
     private static bool HarmonyPresent => harmonyPresent ??= ResolveHarmonyLabel();
 
-    private static string Line => line ??= "Concord v" + Read(typeof(VersionReadout).Assembly) + " (v" + Read(typeof(Patcher).Assembly) + ")";
-
     private static bool ResolveHarmonyLabel() {
         foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()) {
             if (assembly.GetType(HarmonyLabelType, false) != null) {
@@ -65,15 +62,5 @@ public abstract class VersionReadout {
         }
 
         return false;
-    }
-
-    private static string Read(Assembly assembly) {
-        string version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (string.IsNullOrEmpty(version)) {
-            return assembly.GetName().Version?.ToString() ?? "unknown";
-        }
-
-        int metadata = version.IndexOf('+');
-        return metadata < 0 ? version : version.Substring(0, metadata);
     }
 }
