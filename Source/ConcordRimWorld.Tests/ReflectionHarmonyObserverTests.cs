@@ -78,7 +78,7 @@ public class ReflectionHarmonyObserverTests
     }
 
     [Fact]
-    public void NoHarmony_ReturnsNull()
+    public void NoHarmony_ReturnsNullWithoutLogging()
     {
         Func<Assembly[]> loadedAssemblies = () => Array.Empty<Assembly>();
         List<string> logs = new List<string>();
@@ -87,7 +87,7 @@ public class ReflectionHarmonyObserverTests
         Func<MethodBase, IReadOnlyList<string>> lookup = ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(loadedAssemblies, log);
 
         Assert.Null(lookup);
-        Assert.Single(logs);
+        Assert.Empty(logs);
     }
 
     private static void DummyPostfix()

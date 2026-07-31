@@ -20,9 +20,10 @@ public static class ReflectionHarmonyObserver
             }
         }
 
+        // No Harmony means no foreign owners to report. The caller retries on every checkpoint so
+        // a late-loading Harmony still gets picked up, which is why this one stays silent.
         if (harmonyAssembly == null)
         {
-            log("[Concord.RimWorld] ReflectionHarmonyObserver: 0Harmony assembly not found");
             return null;
         }
 
