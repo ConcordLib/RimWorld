@@ -84,6 +84,8 @@ When the injection set on a contested target changes, Concord has to unpatch and
 
 Mono can inline small methods before any patch library gets a chance to detour them. Methods used as coexistence test or probe targets should carry `[MethodImpl(MethodImplOptions.NoInlining)]` to keep that from producing false negatives.
 
+The bridge only activates when the loaded `0Harmony` assembly sits inside an enabled mod's folder. Harmony can be installed but switched off, in which case its assembly never loads and coexistence stays off; a stale or memory-loaded `0Harmony` that traces back to no enabled mod is treated the same way.
+
 The supported Harmony line is 2.4.x - the only line validated against a real Harmony binary. That gate only widens when a new binary has actually been validated against it, not on a version-number guess.
 
 Two settings control this behavior: a kill switch that disables bridge activation outright (the router still installs and still reports raw-pin conflicts, it just never hands routing to Harmony), and a compat mode that routes every method through the bridge when Harmony is present, not just contested ones.

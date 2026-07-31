@@ -1,5 +1,6 @@
 using Concord.Detour;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Xunit;
@@ -16,23 +17,49 @@ public class HarmonyProbeTests
         typeof(HarmonyLib.Harmony).GetType();
     }
 
-    [Fact]
-    public void HarmonyPresent_ReturnsTrueWhenHarmonyLoaded()
+    private static Func<IReadOnlyList<string>> RootsOf(params string[] roots)
     {
-        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
-        bool result = HarmonyProbe.HarmonyPresent(() => loaded);
-        Assert.True(result);
+        return () => roots;
+    }
+
+    private static Func<IReadOnlyList<string>> HarmonyRoot()
+    {
+        return RootsOf(Path.GetDirectoryName(typeof(HarmonyLib.Harmony).Assembly.Location));
     }
 
     [Fact]
-    public void HarmonyPresent_ReturnsFalseWhenHarmonyNotLoaded()
+    public void FindActiveHarmony_ReturnsHarmonyWhenItSitsUnderAnActiveModRoot()
+    {
+        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+        Assembly result = HarmonyProbe.FindActiveHarmony(() => loaded, HarmonyRoot(), _ => { });
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void FindActiveHarmony_ReturnsNullWhenHarmonyNotLoaded()
     {
         Assembly[] loaded = Array.FindAll(
             AppDomain.CurrentDomain.GetAssemblies(),
             a => a.GetName().Name != "0Harmony"
         );
-        bool result = HarmonyProbe.HarmonyPresent(() => loaded);
-        Assert.False(result);
+        Assembly result = HarmonyProbe.FindActiveHarmony(() => loaded, HarmonyRoot(), _ => { });
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void FindActiveHarmony_ReturnsNullAndLogsWhenHarmonyBelongsToNoActiveMod()
+    {
+        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+        string logOutput = null;
+
+        Assembly result = HarmonyProbe.FindActiveHarmony(
+            () => loaded,
+            RootsOf(Path.Combine(Path.GetTempPath(), "not-a-real-mod")),
+            log => logOutput = log
+        );
+
+        Assert.Null(result);
+        Assert.Contains("installed but not enabled", logOutput);
     }
 
     [Fact]
@@ -50,7 +77,8 @@ public class HarmonyProbeTests
             () => Array.FindAll(
                 AppDomain.CurrentDomain.GetAssemblies(),
                 a => a.GetName().Name != "0Harmony"
-            )
+            ),
+            HarmonyRoot()
         );
 
         try
@@ -74,7 +102,8 @@ public class HarmonyProbeTests
         IForeignPatchHost result = HarmonyProbe.TryLoadBridge(
             tempRoot,
             log => logOutput = log,
-            () => AppDomain.CurrentDomain.GetAssemblies()
+            () => AppDomain.CurrentDomain.GetAssemblies(),
+            HarmonyRoot()
         );
 
         try
@@ -86,6 +115,23 @@ public class HarmonyProbeTests
         {
             Directory.Delete(tempRoot, true);
         }
+    }
+
+    [Fact]
+    public void TryLoadBridge_ReturnsNullWhenHarmonyBelongsToNoActiveMod()
+    {
+        string repoRoot = ResolveRepoRoot();
+        string logOutput = null;
+
+        IForeignPatchHost bridge = HarmonyProbe.TryLoadBridge(
+            repoRoot,
+            log => logOutput = log,
+            () => AppDomain.CurrentDomain.GetAssemblies(),
+            RootsOf(Path.Combine(Path.GetTempPath(), "not-a-real-mod"))
+        );
+
+        Assert.Null(bridge);
+        Assert.Equal("Harmony not present; bridge cannot be loaded.", logOutput);
     }
 
     [Fact]
@@ -176,7 +222,8 @@ public class HarmonyProbeTests
         IForeignPatchHost bridge = HarmonyProbe.TryLoadBridge(
             repoRoot,
             log => logOutput = log,
-            () => AppDomain.CurrentDomain.GetAssemblies()
+            () => AppDomain.CurrentDomain.GetAssemblies(),
+            HarmonyRoot()
         );
 
         Assert.NotNull(bridge);
