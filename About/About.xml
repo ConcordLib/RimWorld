@@ -10,6 +10,8 @@
   </supportedVersions>
   <loadBefore>
     <li>Ludeon.RimWorld</li>
+    <li>brrainz.harmony</li>
+    <li>cebarks.rimworld.linuxmisc</li>
   </loadBefore>
   <description>Concord is a runtime patching library for RimWorld mods: author [Patch]/[Inject] templates with attached data and save persistence. Load this before every mod that depends on it.</description>
 </ModMetaData>
