@@ -6,6 +6,7 @@
     <OutputPath>../../Current/Assemblies</OutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <MinVerTagPrefix>v</MinVerTagPrefix>
+    <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,8 +27,8 @@
 
   <ItemGroup>
     <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
-    <!-- 0.12.0 matches the runtime staged into Current/Assemblies/0Concord.dll and is the first
-         release carrying At.Argument, which VersionReadoutPatch uses. -->
+    <!-- The API surface the patches compile against. Keep in step with the Core checkout that
+         StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
     <PackageReference Include="Concord.Ref" Version="0.14.0" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
@@ -39,6 +40,18 @@
        supported Harmony, so the package's net472 asset has to land there. -->
   <Target Name="StageHarmonyHost" AfterTargets="Build">
     <Copy SourceFiles="$(PkgConcord_Harmony)/lib/net472/Concord.Harmony.dll" DestinationFolder="$(MSBuildThisFileDirectory)../../Current/Bridge" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Builds Core in its own MSBuild process, so its MinVer version cannot be stamped onto this
+       assembly, then stages the result the mod actually loads at runtime. Skipped when there is no
+       Core checkout beside this repo, which is how CI stages the published runtime instead. -->
+  <Target Name="StageConcordRuntime" AfterTargets="Build" Condition="Exists('$(ConcordCoreDir)/Concord.slnx')">
+    <Exec Command="dotnet build &quot;$(ConcordCoreDir)/Concord.slnx&quot; -c Release --verbosity quiet" />
+    <Error Condition="!Exists('$(ConcordCoreDir)/Assemblies/net472/Concord.dll')"
+           Text="Core built but produced no Assemblies/net472/Concord.dll at $(ConcordCoreDir)." />
+    <Copy SourceFiles="$(ConcordCoreDir)/Assemblies/net472/Concord.dll"
+          DestinationFiles="$(MSBuildThisFileDirectory)../../Current/Assemblies/0Concord.dll"
+          SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
