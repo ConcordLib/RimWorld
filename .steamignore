@@ -18,3 +18,5 @@ package.json
 package-lock.json
 README.md
 *.md
+NuGet.config
+Concord.zip

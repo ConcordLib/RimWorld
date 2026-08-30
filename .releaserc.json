@@ -4,7 +4,15 @@
   "plugins": [
     ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
     ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
-    "@semantic-release/github",
+    ["@semantic-release/github", {
+      "assets": [
+        {
+          "path": "Concord.zip",
+          "name": "Concord-${nextRelease.version}.zip",
+          "label": "Concord ${nextRelease.version} (unzip into RimWorld/Mods)"
+        }
+      ]
+    }],
     ["semantic-release-steam", {
       "appId": "294100",
       "branchTargets": { "main": "stable" },

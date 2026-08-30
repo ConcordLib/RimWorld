@@ -282,6 +282,16 @@ jobs:
           unzip -p /tmp/concord.runtime.nupkg 'lib/net472/Concord.dll' > Current/Assemblies/0Concord.dll
           test -s Current/Assemblies/0Concord.dll || { echo "Concord.Runtime $VERSION ships no lib/net472/Concord.dll." >&2; exit 1; }
 
+      # Same exclude list Steam uploads through, so the zip and the Workshop item match.
+      # No ! lines in .steamignore: --exclude-from reads those differently than the plugin.
+      - name: Package the mod
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg/Concord
+          rsync -a --exclude-from=.steamignore ./ /tmp/pkg/Concord/
+          (cd /tmp/pkg && zip -qr "$GITHUB_WORKSPACE/Concord.zip" Concord)
+          unzip -l "$GITHUB_WORKSPACE/Concord.zip"
+
       - name: Install semantic-release
         run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
 

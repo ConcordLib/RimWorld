@@ -1,5 +1,6 @@
 bin/
 obj/
+Concord.zip
 *.user
 Current/Assemblies/
 Current/Bridge/
