@@ -68,6 +68,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # Core dispatches about thirty seconds after it publishes, and nuget.org takes minutes to
+      # serve a new version, so a restore straight after the bump races the index and fails with
+      # NU1102 on whichever package landed last. Wait for every package the build pins.
       - name: Apply dispatched Core version
         if: github.event_name == 'repository_dispatch'
         env:
@@ -76,6 +79,18 @@ jobs:
           set -euo pipefail
           PACKAGE_VERSION="${CORE_VERSION#v}"
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
+
+          for package in concord.ref concord.runtime concord.harmony; do
+            for attempt in $(seq 1 20); do
+              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
+                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
+                break
+              fi
+              test "$attempt" -lt 20 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 15s ($attempt/20)"
+              sleep 15
+            done
+          done
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
@@ -174,6 +189,9 @@ jobs:
           sudo docker image prune -af
           df -h /
 
+      # Core dispatches about thirty seconds after it publishes, and nuget.org takes minutes to
+      # serve a new version, so a restore straight after the bump races the index and fails with
+      # NU1102 on whichever package landed last. Wait for every package the build pins.
       - name: Synthetic bump for Core release
         if: github.event_name == 'repository_dispatch'
         env:
@@ -182,6 +200,18 @@ jobs:
           set -euo pipefail
           PACKAGE_VERSION="${CORE_VERSION#v}"
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
+
+          for package in concord.ref concord.runtime concord.harmony; do
+            for attempt in $(seq 1 20); do
+              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
+                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
+                break
+              fi
+              test "$attempt" -lt 20 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 15s ($attempt/20)"
+              sleep 15
+            done
+          done
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
