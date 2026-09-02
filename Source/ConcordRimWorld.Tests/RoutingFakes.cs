@@ -98,6 +98,11 @@ internal class FakeBridge : IForeignPatchHost
     {
         return ForeignOwnersFunc != null ? ForeignOwnersFunc(target) : Array.Empty<string>();
     }
+
+    public IReadOnlyList<string> ConcordOwners(MethodBase target)
+    {
+        return Array.Empty<string>();
+    }
 }
 
 internal class FakeHandle : IDetourHandle
