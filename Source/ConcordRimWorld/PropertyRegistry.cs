@@ -31,8 +31,6 @@ public sealed class PropertyRegistry {
             throw new InvalidOperationException("Duplicate attached property key: " + composite);
         }
 
-        // The label carries the target type too. Without it one assembly declaring the same field name on
-        // two targets writes two elements of the same name, and the loader hands the first to both.
         string label = "concord." + Label(baseType) + "." + key;
         if (!IsXmlName(label)) {
             throw new ArgumentException("Attached-property name is not usable as a save label: " + label, nameof(key));

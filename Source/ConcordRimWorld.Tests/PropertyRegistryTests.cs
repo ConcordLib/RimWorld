@@ -40,18 +40,17 @@ public sealed class PropertyRegistryTests {
         Assert.Throws<ArgumentException>(() => registry.Add(typeof(Target), "x", typeof(Target), null));
     }
 
-    [Theory]
-    [InlineData(typeof(float))]
-    [InlineData(typeof(bool))]
-    [InlineData(typeof(string))]
-    [InlineData(typeof(Verse.IntVec3))]
-    [InlineData(typeof(DayOfWeek))]
-    public void Add_ScribableValueType_IsSupported(Type valueType) {
-        PropertyRegistry registry = new PropertyRegistry();
+    [Fact]
+    public void Add_ScribableValueType_IsSupported() {
+        Type[] supported = { typeof(float), typeof(bool), typeof(string), typeof(Verse.IntVec3), typeof(DayOfWeek) };
 
-        registry.Add(typeof(Target), "x", valueType, null);
+        foreach (Type valueType in supported) {
+            PropertyRegistry registry = new PropertyRegistry();
 
-        Assert.Single(registry.ForBaseType(typeof(Target)));
+            registry.Add(typeof(Target), "x", valueType, null);
+
+            Assert.Single(registry.ForBaseType(typeof(Target)));
+        }
     }
 
     [Fact]

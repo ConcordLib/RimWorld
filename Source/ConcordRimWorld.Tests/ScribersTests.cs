@@ -37,13 +37,14 @@ public sealed class ScribersTests {
         Assert.Throws<ArgumentException>(() => registry.Add(typeof(Holder), "My Mod.count", typeof(int), null));
     }
 
-    [Theory]
-    [InlineData(typeof(List<int>))]
-    [InlineData(typeof(ThingDef))]
-    [InlineData(typeof(Thing))]
-    public void Add_TypeScribeValuesCannotWrite_Throws(Type valueType) {
-        PropertyRegistry registry = new PropertyRegistry();
+    [Fact]
+    public void Add_TypeScribeValuesCannotWrite_Throws() {
+        Type[] unsupported = { typeof(List<int>), typeof(ThingDef), typeof(Thing) };
 
-        Assert.Throws<ArgumentException>(() => registry.Add(typeof(Holder), "Probe.x", valueType, null));
+        foreach (Type valueType in unsupported) {
+            PropertyRegistry registry = new PropertyRegistry();
+
+            Assert.Throws<ArgumentException>(() => registry.Add(typeof(Holder), "Probe.x", valueType, null));
+        }
     }
 }

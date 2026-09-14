@@ -14,8 +14,6 @@ public sealed class RimWorldAttachedPropertyRegistry : IAttachedPropertyRegistry
         this.registry = registry;
     }
 
-    // One bad declaration must not take the mod's whole patch set down with it: Patcher.Apply reverts
-    // every detour it applied when a registration throws.
     public void RegisterAttachedProperty(Type declarationType, Type baseType, string name, Type valueType, IAttachedSlot slot) {
         string key = declarationType.Assembly.GetName().Name + "." + name;
         if (!IsPersisted(baseType)) {
