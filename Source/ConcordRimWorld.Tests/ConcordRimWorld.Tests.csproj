@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.19.2</ConcordVersion>
+    <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.20.0</ConcordVersion>
     <TargetFramework>net472</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>disable</Nullable>
@@ -16,7 +16,7 @@
     <PackageReference Include="Concord.Runtime" Version="$(ConcordVersion)" />
     <!-- The Harmony coexistence host moved to the Concord Core repo; the real-binary
          coexistence tests exercise it against the pinned 0Harmony below. -->
-    <PackageReference Include="Concord.Harmony" Version="0.19.2" />
+    <PackageReference Include="Concord.Harmony" Version="0.20.0" />
   </ItemGroup>
 
   <ItemGroup>
