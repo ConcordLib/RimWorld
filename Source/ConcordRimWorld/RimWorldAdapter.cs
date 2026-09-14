@@ -31,8 +31,9 @@ public static class RimWorldAdapter {
                 RimWorldRuntime.Registry = registry;
                 patchApplier = new RimWorldPatchApplier();
 
-                RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry, "Concord.RimWorld");
+                RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
                 PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry);
+                Patcher.UseAttachedPropertyRegistry(propertyRegistry);
             }
         };
 

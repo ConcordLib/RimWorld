@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Concord.AttachedData;
+using Verse;
 
 namespace Concord.RimWorld;
 
@@ -13,6 +14,10 @@ public sealed class PropertyRegistry {
     public bool IsEmpty => entries.Count == 0;
 
     public void Add(Type baseType, string key, Type valueType, Func<object, bool> validate) {
+        Add(baseType, key, valueType, validate, new Slot());
+    }
+
+    public void Add(Type baseType, string key, Type valueType, Func<object, bool> validate, IAttachedSlot slot) {
         if (IsBclType(baseType)) {
             throw new ArgumentException("Attached properties cannot target BCL types: " + baseType.FullName, nameof(baseType));
         }
@@ -26,7 +31,14 @@ public sealed class PropertyRegistry {
             throw new InvalidOperationException("Duplicate attached property key: " + composite);
         }
 
-        entries.Add(new PropertyEntry(baseType, key, valueType, validate, new Slot(), "concord." + key));
+        // The label carries the target type too. Without it one assembly declaring the same field name on
+        // two targets writes two elements of the same name, and the loader hands the first to both.
+        string label = "concord." + Label(baseType) + "." + key;
+        if (!IsXmlName(label)) {
+            throw new ArgumentException("Attached-property name is not usable as a save label: " + label, nameof(key));
+        }
+
+        entries.Add(new PropertyEntry(baseType, key, valueType, validate, slot, label, Scribers.For(valueType, slot, label)));
         byType.Clear();
     }
 
@@ -40,8 +52,23 @@ public sealed class PropertyRegistry {
         return array;
     }
 
+    private static string Label(Type baseType) {
+        return baseType.FullName.Replace('+', '.');
+    }
+
+    private static bool IsXmlName(string label) {
+        for (int i = 0; i < label.Length; i++) {
+            char c = label[i];
+            if (!char.IsLetterOrDigit(c) && c != '.' && c != '_' && c != '-') {
+                return false;
+            }
+        }
+
+        return label.Length > 0 && (char.IsLetter(label[0]) || label[0] == '_');
+    }
+
     private static bool IsSupportedValueType(Type valueType) {
-        return valueType == typeof(int);
+        return valueType.IsEnum || ParseHelper.HandlesType(valueType);
     }
 
     private static bool IsBclType(Type type) {

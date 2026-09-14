@@ -15,7 +15,7 @@ public sealed class PropertyRegistryTests {
 
         Assert.Single(entries);
         Assert.Equal("count", entries[0].Key);
-        Assert.Equal("concord.count", entries[0].ScribeLabel);
+        Assert.Equal("concord." + typeof(Target).FullName.Replace('+', '.') + ".count", entries[0].ScribeLabel);
     }
 
     [Fact]
@@ -37,7 +37,21 @@ public sealed class PropertyRegistryTests {
     public void Add_UnsupportedValueType_Throws() {
         PropertyRegistry registry = new PropertyRegistry();
 
-        Assert.Throws<ArgumentException>(() => registry.Add(typeof(Target), "x", typeof(double), null));
+        Assert.Throws<ArgumentException>(() => registry.Add(typeof(Target), "x", typeof(Target), null));
+    }
+
+    [Theory]
+    [InlineData(typeof(float))]
+    [InlineData(typeof(bool))]
+    [InlineData(typeof(string))]
+    [InlineData(typeof(Verse.IntVec3))]
+    [InlineData(typeof(DayOfWeek))]
+    public void Add_ScribableValueType_IsSupported(Type valueType) {
+        PropertyRegistry registry = new PropertyRegistry();
+
+        registry.Add(typeof(Target), "x", valueType, null);
+
+        Assert.Single(registry.ForBaseType(typeof(Target)));
     }
 
     [Fact]
