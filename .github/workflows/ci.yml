@@ -81,14 +81,14 @@ jobs:
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
 
           for package in concord.ref concord.runtime concord.harmony; do
-            for attempt in $(seq 1 20); do
+            for attempt in $(seq 1 40); do
               if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
                 | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
                 break
               fi
-              test "$attempt" -lt 20 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 15s ($attempt/20)"
-              sleep 15
+              test "$attempt" -lt 40 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
+              sleep 30
             done
           done
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
@@ -202,14 +202,14 @@ jobs:
           test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
 
           for package in concord.ref concord.runtime concord.harmony; do
-            for attempt in $(seq 1 20); do
+            for attempt in $(seq 1 40); do
               if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
                 | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
                 break
               fi
-              test "$attempt" -lt 20 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 15s ($attempt/20)"
-              sleep 15
+              test "$attempt" -lt 40 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
+              sleep 30
             done
           done
           dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
@@ -279,7 +279,7 @@ jobs:
           WANT="${CORE_VERSION#v}"
           INDEX=https://api.nuget.org/v3-flatcontainer/concord.runtime/index.json
           VERSION=""
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 40); do
             BODY=$(curl -sS "$INDEX" 2>/dev/null || true)
             if [ -n "$BODY" ]; then
               if [ -n "$WANT" ]; then
@@ -295,8 +295,8 @@ jobs:
                 VERSION=""
               fi
             fi
-            echo "Concord.Runtime ${WANT:-latest} is not on nuget.org yet; retrying in 15s ($attempt/20)"
-            sleep 15
+            echo "Concord.Runtime ${WANT:-latest} is not on nuget.org yet; retrying in 30s ($attempt/40)"
+            sleep 30
           done
           test -n "$VERSION" || { echo "Concord.Runtime ${WANT:-latest} never appeared on nuget.org." >&2; exit 1; }
 
