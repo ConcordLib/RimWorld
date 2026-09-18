@@ -9,7 +9,7 @@ namespace Concord.RimWorld;
 
 public class ConcordMod : Mod {
     public ConcordMod(ModContentPack content) : base(content) {
-        Log.Message("[Concord.RimWorld] Concord v" + VersionInfo.Adapter + " loading (runtime v" + VersionInfo.Runtime + ").");
+        Log.Message("[Concord.RimWorld] Concord v" + VersionInfo.Adapter + " loading (runtime v" + VersionInfo.Runtime + ", runtime assembly #" + typeof(Patcher).Assembly.GetHashCode() + ", adapter assembly #" + typeof(ConcordMod).Assembly.GetHashCode() + ").");
 
         if (ShippedConcordCannotLoad()) {
             Log.Error(

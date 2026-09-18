@@ -106,6 +106,53 @@ public class AdapterWiringTests
         }
     }
 
+    [Fact]
+    public void Wire_EagerTierThrows_RestoresBackendAndStaysNotReady()
+    {
+        FakeInner inner = new FakeInner();
+        DetourBackend.Current = inner;
+        List<string> log = new List<string>();
+        List<Action> scheduled = new List<Action>();
+
+        try
+        {
+            WireContext context = NewContext(inner, log, scheduled, (root, l) => null, false, false);
+            context.ApplyEagerTier = () => throw new InvalidProgramException("bad il");
+
+            Assert.Throws<InvalidProgramException>(() => RimWorldAdapter.Wire(context));
+
+            Assert.Same(inner, DetourBackend.Current);
+            Assert.False(RimWorldAdapter.Ready);
+            Assert.Empty(scheduled);
+        }
+        finally
+        {
+            DetourBackend.Current = inner;
+            RimWorldAdapter.ResetForTests();
+        }
+    }
+
+    [Fact]
+    public void Wire_Succeeds_SetsReady()
+    {
+        FakeInner inner = new FakeInner();
+        DetourBackend.Current = inner;
+        List<string> log = new List<string>();
+        List<Action> scheduled = new List<Action>();
+
+        try
+        {
+            RimWorldAdapter.Wire(NewContext(inner, log, scheduled, (root, l) => null, false, false));
+
+            Assert.True(RimWorldAdapter.Ready);
+        }
+        finally
+        {
+            DetourBackend.Current = inner;
+            RimWorldAdapter.ResetForTests();
+        }
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ConsumerTarget()
     {

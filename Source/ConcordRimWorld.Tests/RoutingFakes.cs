@@ -66,6 +66,11 @@ internal class FakeBridge : IForeignPatchHost
         return ValidateRouteReason;
     }
 
+    public string RevalidateRouted(MethodBase target, object hostPatchState)
+    {
+        return null;
+    }
+
     public ForeignRouteResult RouteInto(MethodBase target, IReadOnlyList<Injection> added, object hostPatchState)
     {
         RouteIntoCallCount++;

@@ -18,6 +18,8 @@ public static class RimWorldAdapter {
     private static int lateActivationAttempted;
     private static IDetourBackend backendBeforeWire;
 
+    public static bool Ready { get; private set; }
+
     public static void Wire(ModContentPack content, ConcordSettings settings) {
         WireContext context = new WireContext {
             Settings = settings,
@@ -32,7 +34,7 @@ public static class RimWorldAdapter {
                 patchApplier = new RimWorldPatchApplier();
 
                 RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
-                PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry);
+                PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, Log.Error);
                 Patcher.UseAttachedPropertyRegistry(propertyRegistry);
             }
         };
@@ -47,10 +49,27 @@ public static class RimWorldAdapter {
 
         wired = true;
 
+        int forgotten = ResolveCache.ForgetReflectionOnly();
+        if (forgotten > 0) {
+            context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
+        }
+
         backendBeforeWire = DetourBackend.Current;
         RoutingDetourBackend router = new RoutingDetourBackend(backendBeforeWire, context.Log);
         DetourBackend.Current = router;
 
+        try {
+            WireRouted(context, router);
+            Ready = true;
+        } catch {
+            DetourBackend.Current = backendBeforeWire;
+            backendBeforeWire = null;
+            wired = false;
+            throw;
+        }
+    }
+
+    private static void WireRouted(WireContext context, RoutingDetourBackend router) {
         router.RouteEverything = context.Settings.RouteEverythingWhenHarmonyPresent;
 
         context.ApplyEagerTier();
@@ -135,6 +154,7 @@ public static class RimWorldAdapter {
 
     internal static void ResetForTests() {
         wired = false;
+        Ready = false;
         patchApplier = null;
         activeBridge = null;
         reflectionLookup = null;
