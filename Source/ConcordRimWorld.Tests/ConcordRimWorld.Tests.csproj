@@ -13,10 +13,10 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageReference Include="xunit.runner.console" Version="2.9.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Concord.Runtime" Version="$(ConcordVersion)" />
+    <PackageReference Include="Concord.Runtime" Version="0.22.0" />
     <!-- The Harmony coexistence host moved to the Concord Core repo; the real-binary
          coexistence tests exercise it against the pinned 0Harmony below. -->
-    <PackageReference Include="Concord.Harmony" Version="0.21.1" />
+    <PackageReference Include="Concord.Harmony" Version="0.22.0" />
   </ItemGroup>
 
   <ItemGroup>

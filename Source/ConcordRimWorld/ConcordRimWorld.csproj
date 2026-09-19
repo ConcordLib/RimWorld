@@ -30,11 +30,11 @@
     <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
     <!-- The API surface the patches compile against. Keep in step with the Core checkout that
          StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
-    <PackageReference Include="Concord.Ref" Version="$(ConcordVersion)" PrivateAssets="all" />
+    <PackageReference Include="Concord.Ref" Version="0.22.0" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
          RimWorld does not scan Current/Bridge for mod assemblies. -->
-    <PackageReference Include="Concord.Harmony" Version="0.21.1" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Harmony" Version="0.22.0" GeneratePathProperty="true" ExcludeAssets="all" />
   </ItemGroup>
 
   <!-- HarmonyProbe loads Current/Bridge/Concord.Harmony.dll by path after it finds a
