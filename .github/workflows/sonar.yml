@@ -1,0 +1,47 @@
+name: sonar
+
+# pull_request_target so a fork's PR carries SONAR_TOKEN. mod-ci checks out the PR head and
+# passes the PR coordinates to the scanner. Only the sonar token reaches this job.
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    uses: RimWorks/mod-ci/.github/workflows/sonar.yml@v1.11
+    with:
+      solution: Concord.RimWorld.slnx
+      project-key: ConcordLib_RimWorld
+      organization: concordlib
+      analyzer-severity: none
+      coverage-exclusions: '**'
+      extra-begin-args: /d:sonar.scanner.scanAll=false /d:sonar.qualitygate.wait=true
+      # The build needs the game's managed dlls. CI pushes them as a private image; pull the
+      # branch's latest and point RimWorldManaged at it. The tests need mono.
+      pre-scan-command: |
+        set -euo pipefail
+        echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        docker create --name rwgame ghcr.io/concordlib/rimworld-game:latest-public
+        mkdir -p /opt/rimworld
+        docker cp rwgame:/game/. /opt/rimworld/
+        docker rm -f rwgame
+        echo "RimWorldManaged=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")" >> "$GITHUB_ENV"
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq mono-complete
+      # net472 under mono: dotnet test cannot host it on linux.
+      test-command: |
+        set -euo pipefail
+        RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
+        mono "$RUNNER" "$(find Source/ConcordRimWorld.Tests/bin/Release -name ConcordRimWorld.Tests.dll | head -1)"
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
