@@ -15,7 +15,7 @@ public sealed class RimWorldAttachedPropertyRegistry : IAttachedPropertyRegistry
     }
 
     public void RegisterAttachedProperty(Type declarationType, Type baseType, string name, Type valueType, IAttachedSlot slot) {
-        string key = declarationType.Assembly.GetName().Name + "." + name;
+        string key = HarmonyProbe.SimpleName(declarationType.Assembly) + "." + name;
         if (!IsPersisted(baseType)) {
             Log.Warning("[Concord.RimWorld] Attached field '" + declarationType.FullName + "." + name + "' targets " + baseType.Name + ", which Concord does not scribe. It will work, but it will not be saved. Concord hooks Thing, Faction, WorldObject, Hediff, ThingComp, MapComponent, WorldComponent and GameComponent.");
         }

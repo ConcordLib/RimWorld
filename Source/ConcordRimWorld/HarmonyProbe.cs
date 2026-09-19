@@ -11,6 +11,15 @@ public static class HarmonyProbe
 {
     internal const string BridgeRelativePath = "Current/Bridge/Concord.Harmony.dll";
 
+    // Assembly.GetName() computes CodeBase, and mono asserts on that for a byte-loaded assembly.
+    // FullName is already built, so it is safe to read on any assembly in the domain.
+    internal static string SimpleName(Assembly assembly)
+    {
+        string full = assembly.FullName;
+        int comma = full.IndexOf(',');
+        return comma < 0 ? full : full.Substring(0, comma);
+    }
+
     public static bool HarmonyPresent(Func<Assembly[]> loadedAssemblies)
     {
         return FindActiveHarmony(loadedAssemblies, ActiveModRoots, _ => { }) != null;
@@ -23,7 +32,7 @@ public static class HarmonyProbe
         Func<IReadOnlyList<string>> activeModRoots,
         Action<string> log)
     {
-        Assembly[] candidates = Array.FindAll(loadedAssemblies(), a => a.GetName().Name == "0Harmony");
+        Assembly[] candidates = Array.FindAll(loadedAssemblies(), a => SimpleName(a) == "0Harmony");
         Assembly harmony = candidates.Length > 0 ? candidates[0] : null;
 
         if (harmony == null)

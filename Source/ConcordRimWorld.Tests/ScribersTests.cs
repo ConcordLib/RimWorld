@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Concord.RimWorld.Tests;
 
+[Collection(GameAssemblies.Name)]
 public sealed class ScribersTests {
     private sealed class Holder : IExposable {
         public void ExposeData() {

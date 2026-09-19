@@ -33,7 +33,7 @@ public class ConcordMod : Mod {
     private static bool ShippedConcordCannotLoad() {
         Assembly concord = null;
         foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()) {
-            if (assembly.GetName().Name == "Concord") {
+            if (HarmonyProbe.SimpleName(assembly) == "Concord") {
                 concord = assembly;
                 break;
             }

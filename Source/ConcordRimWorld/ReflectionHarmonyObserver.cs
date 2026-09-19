@@ -13,7 +13,7 @@ public static class ReflectionHarmonyObserver
         Assembly harmonyAssembly = null;
         foreach (Assembly assembly in loadedAssemblies())
         {
-            if (assembly.GetName().Name == "0Harmony")
+            if (HarmonyProbe.SimpleName(assembly) == "0Harmony")
             {
                 harmonyAssembly = assembly;
                 break;

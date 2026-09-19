@@ -9,12 +9,19 @@ using HarmonyLib;
 
 namespace Concord.RimWorld.Tests;
 
-[Collection("HarmonySerial")]
+[Collection(GameAssemblies.Name)]
 public class HarmonyProbeTests
 {
     static HarmonyProbeTests()
     {
         typeof(HarmonyLib.Harmony).GetType();
+    }
+
+    // A fixed list, not the live domain. Reading names off AppDomain.GetAssemblies() while another
+    // collection is still loading game dlls trips a mono loader assertion and kills the runner.
+    private static Assembly[] Loaded()
+    {
+        return new[] { typeof(HarmonyLib.Harmony).Assembly, typeof(HarmonyProbe).Assembly, typeof(HarmonyProbeTests).Assembly };
     }
 
     private static Func<IReadOnlyList<string>> RootsOf(params string[] roots)
@@ -30,7 +37,7 @@ public class HarmonyProbeTests
     [Fact]
     public void FindActiveHarmony_ReturnsHarmonyWhenItSitsUnderAnActiveModRoot()
     {
-        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+        Assembly[] loaded = Loaded();
         Assembly result = HarmonyProbe.FindActiveHarmony(() => loaded, HarmonyRoot(), _ => { });
         Assert.NotNull(result);
     }
@@ -39,7 +46,7 @@ public class HarmonyProbeTests
     public void FindActiveHarmony_ReturnsNullWhenHarmonyNotLoaded()
     {
         Assembly[] loaded = Array.FindAll(
-            AppDomain.CurrentDomain.GetAssemblies(),
+            Loaded(),
             a => a.GetName().Name != "0Harmony"
         );
         Assembly result = HarmonyProbe.FindActiveHarmony(() => loaded, HarmonyRoot(), _ => { });
@@ -49,7 +56,7 @@ public class HarmonyProbeTests
     [Fact]
     public void FindActiveHarmony_ReturnsNullAndLogsWhenHarmonyBelongsToNoActiveMod()
     {
-        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+        Assembly[] loaded = Loaded();
         string logOutput = null;
 
         Assembly result = HarmonyProbe.FindActiveHarmony(
@@ -120,7 +127,7 @@ public class HarmonyProbeTests
             tempRoot,
             log => logOutput = log,
             () => Array.FindAll(
-                AppDomain.CurrentDomain.GetAssemblies(),
+                Loaded(),
                 a => a.GetName().Name != "0Harmony"
             ),
             HarmonyRoot()
@@ -147,7 +154,7 @@ public class HarmonyProbeTests
         IForeignPatchHost result = HarmonyProbe.TryLoadBridge(
             tempRoot,
             log => logOutput = log,
-            () => AppDomain.CurrentDomain.GetAssemblies(),
+            () => Loaded(),
             HarmonyRoot()
         );
 
@@ -171,7 +178,7 @@ public class HarmonyProbeTests
         IForeignPatchHost bridge = HarmonyProbe.TryLoadBridge(
             repoRoot,
             log => logOutput = log,
-            () => AppDomain.CurrentDomain.GetAssemblies(),
+            () => Loaded(),
             RootsOf(Path.Combine(Path.GetTempPath(), "not-a-real-mod"))
         );
 
@@ -267,7 +274,7 @@ public class HarmonyProbeTests
         IForeignPatchHost bridge = HarmonyProbe.TryLoadBridge(
             repoRoot,
             log => logOutput = log,
-            () => AppDomain.CurrentDomain.GetAssemblies(),
+            () => Loaded(),
             HarmonyRoot()
         );
 

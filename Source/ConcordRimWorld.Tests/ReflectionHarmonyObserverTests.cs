@@ -9,7 +9,7 @@ using Concord.RimWorld;
 
 namespace Concord.RimWorld.Tests;
 
-[Collection("HarmonySerial")]
+[Collection(GameAssemblies.Name)]
 public class ReflectionHarmonyObserverTests
 {
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -39,7 +39,7 @@ public class ReflectionHarmonyObserverTests
 
         try
         {
-            Func<Assembly[]> loadedAssemblies = () => AppDomain.CurrentDomain.GetAssemblies();
+            Func<Assembly[]> loadedAssemblies = () => new[] { typeof(HarmonyLib.Harmony).Assembly, typeof(ReflectionHarmonyObserverTests).Assembly };
             List<string> logs = new List<string>();
             Action<string> log = (msg) => logs.Add(msg);
 
@@ -65,7 +65,7 @@ public class ReflectionHarmonyObserverTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        Func<Assembly[]> loadedAssemblies = () => AppDomain.CurrentDomain.GetAssemblies();
+        Func<Assembly[]> loadedAssemblies = () => new[] { typeof(HarmonyLib.Harmony).Assembly, typeof(ReflectionHarmonyObserverTests).Assembly };
         List<string> logs = new List<string>();
         Action<string> log = (msg) => logs.Add(msg);
 

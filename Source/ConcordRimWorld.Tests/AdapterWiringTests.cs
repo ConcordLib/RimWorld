@@ -9,7 +9,7 @@ using Concord.RimWorld;
 
 namespace Concord.RimWorld.Tests;
 
-[Collection("AdapterWiringSerial")]
+[Collection(GameAssemblies.Name)]
 public class AdapterWiringTests
 {
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -90,7 +90,7 @@ public static class RimWorldAdapter {
                         return;
                     }
 
-                    if (args.LoadedAssembly.GetName().Name != "0Harmony") {
+                    if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
                         return;
                     }
 
