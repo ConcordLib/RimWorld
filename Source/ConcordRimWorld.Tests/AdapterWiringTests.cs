@@ -153,6 +153,30 @@ public class AdapterWiringTests
         }
     }
 
+    [Fact]
+    public void Wire_AfterAnEarlierWire_WrapsTheRawBackendNotTheOldRouter()
+    {
+        FakeInner inner = new FakeInner();
+        RoutingDetourBackend leftover = new RoutingDetourBackend(inner, _ => { });
+        DetourBackend.Current = leftover;
+        List<string> log = new List<string>();
+        List<Action> scheduled = new List<Action>();
+
+        try
+        {
+            RimWorldAdapter.Wire(NewContext(inner, log, scheduled, (root, l) => null, false, false));
+
+            RoutingDetourBackend router = Assert.IsType<RoutingDetourBackend>(DetourBackend.Current);
+            Assert.NotSame(leftover, router);
+            Assert.Same(inner, router.Inner);
+        }
+        finally
+        {
+            DetourBackend.Current = inner;
+            RimWorldAdapter.ResetForTests();
+        }
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ConsumerTarget()
     {

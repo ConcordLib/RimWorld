@@ -23,22 +23,41 @@ public static class HarmonyProbe
         Func<IReadOnlyList<string>> activeModRoots,
         Action<string> log)
     {
-        Assembly harmony = Array.Find(loadedAssemblies(), a => a.GetName().Name == "0Harmony");
+        Assembly[] candidates = Array.FindAll(loadedAssemblies(), a => a.GetName().Name == "0Harmony");
+        Assembly harmony = candidates.Length > 0 ? candidates[0] : null;
 
         if (harmony == null)
         {
             return null;
         }
 
+        if (candidates.Length > 1)
+        {
+            List<string> described = new List<string>();
+            foreach (Assembly candidate in candidates)
+            {
+                described.Add("#" + candidate.GetHashCode() + " " + (Location(candidate) ?? "<memory>"));
+            }
+
+            log("0Harmony is loaded " + candidates.Length + " times: " + string.Join(", ", described) + ". Using #" + harmony.GetHashCode() + ".");
+        }
+
         string location = Location(harmony);
+        IReadOnlyList<string> roots = activeModRoots();
 
         if (location == null)
         {
-            log("0Harmony is loaded from memory, so it cannot be traced to an enabled mod; coexistence stays off.");
+            string shipper = FindHarmonyShipper(roots);
+            if (shipper != null)
+            {
+                log($"0Harmony is loaded from memory (an assembly reloader such as Prepatcher does this); {shipper} ships it, so coexistence stays on.");
+                return harmony;
+            }
+
+            log("0Harmony is loaded from memory and no enabled mod ships it, so it cannot be traced to an enabled mod; coexistence stays off.");
             return null;
         }
 
-        IReadOnlyList<string> roots = activeModRoots();
 
         for (int i = 0; i < roots.Count; i++)
         {
@@ -88,7 +107,7 @@ public static class HarmonyProbe
                 return null;
             }
 
-            Assembly bridgeAssembly = Assembly.LoadFrom(bridgePath);
+            Assembly bridgeAssembly = Assembly.Load(File.ReadAllBytes(bridgePath));
 
             Type bridgeType = null;
             foreach (Type type in bridgeAssembly.GetTypes())
@@ -150,6 +169,19 @@ public static class HarmonyProbe
         }
 
         return roots;
+    }
+
+    private static string FindHarmonyShipper(IReadOnlyList<string> roots)
+    {
+        for (int i = 0; i < roots.Count; i++)
+        {
+            if (Directory.Exists(roots[i]) && Directory.GetFiles(roots[i], "0Harmony.dll", SearchOption.AllDirectories).Length > 0)
+            {
+                return roots[i];
+            }
+        }
+
+        return null;
     }
 
     private static string Location(Assembly assembly)

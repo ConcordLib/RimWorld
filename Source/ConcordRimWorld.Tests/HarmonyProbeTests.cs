@@ -62,6 +62,51 @@ public class HarmonyProbeTests
         Assert.Contains("installed but not enabled", logOutput);
     }
 
+    private static Assembly MemoryLoadedHarmony()
+    {
+        return System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("0Harmony"),
+            System.Reflection.Emit.AssemblyBuilderAccess.Run);
+    }
+
+    [Fact]
+    public void FindActiveHarmony_AcceptsMemoryLoadedHarmonyWhenAnActiveModShipsIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(Path.Combine(root, "Assemblies"));
+        File.WriteAllBytes(Path.Combine(root, "Assemblies", "0Harmony.dll"), new byte[] { 0 });
+        string logOutput = null;
+
+        try
+        {
+            Assembly result = HarmonyProbe.FindActiveHarmony(
+                () => new[] { MemoryLoadedHarmony() },
+                RootsOf(root),
+                log => logOutput = log);
+
+            Assert.NotNull(result);
+            Assert.Contains("coexistence stays on", logOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void FindActiveHarmony_RejectsMemoryLoadedHarmonyWhenNoActiveModShipsIt()
+    {
+        string logOutput = null;
+
+        Assembly result = HarmonyProbe.FindActiveHarmony(
+            () => new[] { MemoryLoadedHarmony() },
+            RootsOf(Path.Combine(Path.GetTempPath(), "not-a-real-mod")),
+            log => logOutput = log);
+
+        Assert.Null(result);
+        Assert.Contains("loaded from memory", logOutput);
+    }
+
     [Fact]
     public void TryLoadBridge_ReturnsNullAndLogsWhenHarmonyAbsent()
     {

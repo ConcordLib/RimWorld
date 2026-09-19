@@ -54,7 +54,7 @@ public static class RimWorldAdapter {
             context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
         }
 
-        backendBeforeWire = DetourBackend.Current;
+        backendBeforeWire = DetourBackend.Current is RoutingDetourBackend leftover ? leftover.Inner : DetourBackend.Current;
         RoutingDetourBackend router = new RoutingDetourBackend(backendBeforeWire, context.Log);
         DetourBackend.Current = router;
 
