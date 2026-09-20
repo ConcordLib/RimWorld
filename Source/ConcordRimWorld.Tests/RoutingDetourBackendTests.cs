@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using Concord.Emit;
 using Xunit;
 using Concord.Detour;
-using Concord.Emit;
 using Concord.RimWorld;
 
 namespace Concord.RimWorld.Tests;
@@ -136,13 +136,13 @@ public class RoutingDetourBackendTests
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
 
-        InvalidOperationException first = Assert.Throws<InvalidOperationException>(
+        ConcordEmitException first = Assert.Throws<ConcordEmitException>(
             () => router.ApplyComposed(target, added)
         );
         Assert.Contains("no-ctor-around", first.Message);
         Assert.Equal(1, bridge.TryRouteCallCount);
 
-        InvalidOperationException second = Assert.Throws<InvalidOperationException>(
+        ConcordEmitException second = Assert.Throws<ConcordEmitException>(
             () => router.ApplyComposed(target, added)
         );
         Assert.Contains("no-ctor-around", second.Message);
@@ -229,14 +229,14 @@ public class RoutingDetourBackendTests
         router.ActivateHost(bridge);
         MethodBase target = TargetMethod();
         IReadOnlyList<Injection> added = new List<Injection> { MakeInjection(target) };
-        Assert.Throws<InvalidOperationException>(() => router.ApplyComposed(target, added));
+        Assert.Throws<ConcordEmitException>(() => router.ApplyComposed(target, added));
 
         MethodInfo replacement = typeof(RoutingDetourBackendTests).GetMethod(
             nameof(OtherTarget),
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        Assert.Throws<InvalidOperationException>(() => router.Apply(target, replacement));
+        Assert.Throws<ConcordEmitException>(() => router.Apply(target, replacement));
     }
 
     [Fact]
