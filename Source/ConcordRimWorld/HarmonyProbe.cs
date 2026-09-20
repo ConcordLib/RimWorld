@@ -116,7 +116,7 @@ public static class HarmonyProbe
                 return null;
             }
 
-            Assembly bridgeAssembly = Assembly.Load(File.ReadAllBytes(bridgePath));
+            Assembly bridgeAssembly = Assembly.Load(AssemblyImage.WithFreshModuleId(File.ReadAllBytes(bridgePath)));
 
             Type bridgeType = null;
             foreach (Type type in bridgeAssembly.GetTypes())
@@ -142,7 +142,7 @@ public static class HarmonyProbe
         }
         catch (Exception ex)
         {
-            log($"Exception loading bridge: {ex.Message}");
+            log($"Exception loading bridge: {ex}");
             return null;
         }
     }

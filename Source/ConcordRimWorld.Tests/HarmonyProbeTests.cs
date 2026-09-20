@@ -283,6 +283,19 @@ public class HarmonyProbeTests
         Assert.Contains(CoexistenceLogMarkers.BridgeActive, logOutput);
     }
 
+    [Fact]
+    public void TryLoadBridge_LoadsEachBridgeUnderItsOwnModuleId()
+    {
+        string repoRoot = ResolveRepoRoot();
+
+        IForeignPatchHost first = HarmonyProbe.TryLoadBridge(repoRoot, _ => { }, () => Loaded(), HarmonyRoot());
+        IForeignPatchHost second = HarmonyProbe.TryLoadBridge(repoRoot, _ => { }, () => Loaded(), HarmonyRoot());
+
+        Assert.NotEqual(
+            first.GetType().Module.ModuleVersionId,
+            second.GetType().Module.ModuleVersionId);
+    }
+
     private static string ResolveRepoRoot()
     {
         Uri codeBase = new Uri(typeof(HarmonyProbeTests).Assembly.CodeBase);
