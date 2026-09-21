@@ -41,7 +41,7 @@ internal class FakeBridge : IForeignPatchHost
     public int RouteIntoCallCount;
     public bool LastForceRoute;
     public object LastHostPatchState;
-    public string ValidateRouteReason;
+    public string ValidateRouteReason = null;
     public bool NotifierInstalls = true;
     public IForeignPatchObserver InstalledObserver;
     public Func<MethodBase, IReadOnlyList<string>> ForeignOwnersFunc;

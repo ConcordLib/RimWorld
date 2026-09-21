@@ -31,13 +31,8 @@ public class ConcordMod : Mod {
     }
 
     private static bool ShippedConcordCannotLoad() {
-        Assembly concord = null;
-        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()) {
-            if (HarmonyProbe.SimpleName(assembly) == "Concord") {
-                concord = assembly;
-                break;
-            }
-        }
+        Assembly concord = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(assembly => HarmonyProbe.SimpleName(assembly) == "Concord");
 
         if (concord == null) {
             return false;

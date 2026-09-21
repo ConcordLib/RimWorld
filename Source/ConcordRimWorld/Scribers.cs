@@ -6,6 +6,7 @@ using Verse;
 namespace Concord.RimWorld;
 
 internal static class Scribers {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "Scribers reaches its own private generic builder to close it over a runtime type.")]
     private static readonly MethodInfo BuildMethod = typeof(Scribers).GetMethod(nameof(Build), BindingFlags.NonPublic | BindingFlags.Static);
 
     internal static Action<object> For(Type valueType, IAttachedSlot slot, string label) {

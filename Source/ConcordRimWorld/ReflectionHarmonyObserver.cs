@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace Concord.RimWorld;
@@ -10,15 +11,8 @@ public static class ReflectionHarmonyObserver
         Func<Assembly[]> loadedAssemblies,
         Action<string> log)
     {
-        Assembly harmonyAssembly = null;
-        foreach (Assembly assembly in loadedAssemblies())
-        {
-            if (HarmonyProbe.SimpleName(assembly) == "0Harmony")
-            {
-                harmonyAssembly = assembly;
-                break;
-            }
-        }
+        Assembly harmonyAssembly = loadedAssemblies()
+            .FirstOrDefault(assembly => HarmonyProbe.SimpleName(assembly) == "0Harmony");
 
         // No Harmony means no foreign owners to report. The caller retries on every checkpoint so
         // a late-loading Harmony still gets picked up, which is why this one stays silent.
@@ -70,7 +64,7 @@ public static class ReflectionHarmonyObserver
 
             foreach (string memberName in memberNames)
             {
-                object patchCollection = GetMemberValue(patchInfo, patchesType, memberName, log);
+                object patchCollection = GetMemberValue(patchInfo, patchesType, memberName);
                 if (patchCollection == null)
                 {
                     continue;
@@ -87,7 +81,7 @@ public static class ReflectionHarmonyObserver
         return owners.AsReadOnly();
     }
 
-    private static object GetMemberValue(object instance, Type type, string memberName, Action<string> log)
+    private static object GetMemberValue(object instance, Type type, string memberName)
     {
         FieldInfo field = type.GetField(memberName, BindingFlags.Public | BindingFlags.Instance);
         if (field != null)

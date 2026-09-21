@@ -11,7 +11,6 @@ namespace Concord.RimWorld;
 
 public static class RimWorldAdapter {
     private static bool wired;
-    private static RimWorldPatchApplier patchApplier;
     private static volatile IForeignPatchHost activeBridge;
     private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
     private static AssemblyLoadEventHandler lateActivationHandler;
@@ -31,7 +30,7 @@ public static class RimWorldAdapter {
             ApplyEagerTier = () => {
                 PropertyRegistry registry = new PropertyRegistry();
                 RimWorldRuntime.Registry = registry;
-                patchApplier = new RimWorldPatchApplier();
+                RimWorldPatchApplier patchApplier = new RimWorldPatchApplier();
 
                 RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
                 PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, Log.Error);
@@ -75,46 +74,13 @@ public static class RimWorldAdapter {
         context.ApplyEagerTier();
 
         if (context.Settings.BridgeRoutingEnabled) {
-            IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
-            if (bridge != null) {
-                activeBridge = bridge;
-                router.ActivateHost(bridge);
-            } else {
-                lateActivationHandler = (sender, args) => {
-                    if (activeBridge != null) {
-                        if (lateActivationHandler != null) {
-                            AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-                            lateActivationHandler = null;
-                        }
-
-                        return;
-                    }
-
-                    if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
-                        return;
-                    }
-
-                    TryLateActivation(context);
-                };
-
-                AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
-            }
+            ActivateBridgeOrWaitForHarmony(context, router);
         }
-
-        Func<MethodBase, IReadOnlyList<string>> lookup = target => {
-            IForeignPatchHost bridge = activeBridge;
-            if (bridge != null) {
-                return bridge.ForeignOwners(target);
-            }
-
-            reflectionLookup ??= ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(() => AppDomain.CurrentDomain.GetAssemblies(), context.Log);
-            return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
-        };
 
         ContentionWatcher watcher = new ContentionWatcher(
             router.RawPinnedTargets,
             router.ContestedLostTargets,
-            lookup,
+            target => ForeignOwners(target, context),
             () => router.NotifierInstalled,
             context.Log,
             context.DialogOnce);
@@ -125,6 +91,45 @@ public static class RimWorldAdapter {
             watcher.RunCheckpoint();
             context.Schedule(watcher.RunCheckpoint);
         });
+    }
+
+    private static void ActivateBridgeOrWaitForHarmony(WireContext context, RoutingDetourBackend router) {
+        IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
+        if (bridge != null) {
+            activeBridge = bridge;
+            router.ActivateHost(bridge);
+            return;
+        }
+
+        lateActivationHandler = (sender, args) => OnAssemblyLoaded(context, args);
+        AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
+    }
+
+    private static void OnAssemblyLoaded(WireContext context, AssemblyLoadEventArgs args) {
+        if (activeBridge != null) {
+            if (lateActivationHandler != null) {
+                AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
+                lateActivationHandler = null;
+            }
+
+            return;
+        }
+
+        if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
+            return;
+        }
+
+        TryLateActivation(context);
+    }
+
+    private static IReadOnlyList<string> ForeignOwners(MethodBase target, WireContext context) {
+        IForeignPatchHost bridge = activeBridge;
+        if (bridge != null) {
+            return bridge.ForeignOwners(target);
+        }
+
+        reflectionLookup ??= ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(() => AppDomain.CurrentDomain.GetAssemblies(), context.Log);
+        return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
     }
 
     internal static void TryLateActivation(WireContext context) {
@@ -155,7 +160,6 @@ public static class RimWorldAdapter {
     internal static void ResetForTests() {
         wired = false;
         Ready = false;
-        patchApplier = null;
         activeBridge = null;
         reflectionLookup = null;
         lateActivationAttempted = 0;

@@ -55,12 +55,6 @@ public abstract class VersionReadout {
     private static bool HarmonyPresent => harmonyPresent ??= ResolveHarmonyLabel();
 
     private static bool ResolveHarmonyLabel() {
-        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()) {
-            if (assembly.GetType(HarmonyLabelType, false) != null) {
-                return true;
-            }
-        }
-
-        return false;
+        return Array.Exists(AppDomain.CurrentDomain.GetAssemblies(), assembly => assembly.GetType(HarmonyLabelType, false) != null);
     }
 }

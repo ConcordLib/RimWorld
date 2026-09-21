@@ -33,12 +33,6 @@ public sealed class RimWorldAttachedPropertyRegistry : IAttachedPropertyRegistry
     };
 
     private static bool IsPersisted(Type baseType) {
-        foreach (Type root in ScribedRoots) {
-            if (root.IsAssignableFrom(baseType)) {
-                return true;
-            }
-        }
-
-        return false;
+        return Array.Exists(ScribedRoots, root => root.IsAssignableFrom(baseType));
     }
 }
