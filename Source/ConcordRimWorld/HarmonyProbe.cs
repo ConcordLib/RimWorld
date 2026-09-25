@@ -20,6 +20,30 @@ public static class HarmonyProbe
         return comma < 0 ? full : full.Substring(0, comma);
     }
 
+    internal static Version VersionOf(Assembly assembly)
+    {
+        string full = assembly.FullName;
+
+        if (full == null)
+        {
+            return null;
+        }
+
+        const string marker = "Version=";
+        int start = full.IndexOf(marker, StringComparison.Ordinal);
+
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += marker.Length;
+        int end = full.IndexOf(',', start);
+        string value = end < 0 ? full.Substring(start) : full.Substring(start, end - start);
+
+        return Version.TryParse(value, out Version parsed) ? parsed : null;
+    }
+
     public static bool HarmonyPresent(Func<Assembly[]> loadedAssemblies)
     {
         return FindActiveHarmony(loadedAssemblies, ActiveModRoots, _ => { }) != null;
@@ -109,7 +133,7 @@ public static class HarmonyProbe
 
         try
         {
-            Version harmonyVersion = harmonyAssembly.GetName().Version;
+            Version harmonyVersion = VersionOf(harmonyAssembly);
 
             if (!VersionSupported(harmonyVersion, log))
             {
@@ -149,6 +173,12 @@ public static class HarmonyProbe
 
     internal static bool VersionSupported(Version found, Action<string> log)
     {
+        if (found == null)
+        {
+            log("Harmony version could not be read from its assembly name. Bridge requires [2.4.1, 2.5).");
+            return false;
+        }
+
         if (found >= new Version(2, 4, 1) && found < new Version(2, 5, 0))
         {
             return true;
