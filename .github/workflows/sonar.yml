@@ -31,7 +31,7 @@ jobs:
         mkdir -p /opt/rimworld
         docker cp rwgame:/game/. /opt/rimworld/
         docker rm -f rwgame
-        echo "RimWorldManaged=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")" >> "$GITHUB_ENV"
+        echo "GameManagedDir=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")" >> "$GITHUB_ENV"
         sudo apt-get update -qq
         sudo apt-get install -y -qq mono-complete
       test-command: |
