@@ -146,6 +146,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
+          STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
           STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
           STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
         run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
