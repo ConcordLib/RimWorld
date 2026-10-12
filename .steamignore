@@ -4,6 +4,7 @@
 .gitattributes
 .editorconfig
 .steamignore
+.gamecrate.yml
 
 Source/
 TestMod/

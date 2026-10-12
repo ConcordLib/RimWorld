@@ -7,9 +7,9 @@ using Concord.Orchestration;
 namespace Concord.RimWorld;
 
 public sealed class RimWorldPatchApplier : IPatchApplier {
-    private readonly List<IPatchHandle> handles = [];
+  private readonly List<IPatchHandle> handles = [];
 
-    public void ApplyPatch(MethodBase target, Injection injection) {
-        handles.Add(Patcher.PatchInjection(target, injection));
-    }
+  public void ApplyPatch(MethodBase target, Injection injection) {
+    handles.Add(Patcher.PatchInjection(target, injection));
+  }
 }

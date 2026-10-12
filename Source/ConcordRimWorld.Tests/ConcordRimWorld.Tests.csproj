@@ -2,9 +2,12 @@
 
   <PropertyGroup>
     <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.23.0</ConcordVersion>
-    <TargetFramework>net472</TargetFramework>
     <IsPackable>false</IsPackable>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
+    <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
+    <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
+    <UsePinnedConcord Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">true</UsePinnedConcord>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,11 +15,15 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageReference Include="xunit.runner.console" Version="2.9.3" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Concord.Runtime" Version="0.24.2" />
-    <!-- The Harmony coexistence host moved to the Concord Core repo; the real-binary
-         coexistence tests exercise it against the pinned 0Harmony below. -->
-    <PackageReference Include="Concord.Harmony" Version="0.24.2" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" Condition="'$(GameTfm)' == 'net472'" />
+    <PackageReference Include="Concord.Runtime" Version="0.24.2" Condition="'$(UsePinnedConcord)' == 'true'" />
+    <PackageReference Include="Lib.Harmony" Version="3.0.*-*" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePinnedConcord)' != 'true'">
+    <Reference Include="Concord">
+      <HintPath>$(ConcordCoreDir)/Assemblies/$(GameTfm)/Concord.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -24,11 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="0Harmony">
-      <HintPath>libs/0Harmony.dll</HintPath>
-    </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>$(RimWorldManaged)/Assembly-CSharp.dll</HintPath>
+      <HintPath>$(GamecrateRefs)/Assembly-CSharp.dll</HintPath>
     </Reference>
   </ItemGroup>
 

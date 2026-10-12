@@ -7,7 +7,6 @@ namespace Concord.RimWorld.Tests;
 // runner down with a loader assertion. Every class that touches a game or Harmony type shares this
 // collection so those loads happen on one thread. Pure classes stay parallel.
 [CollectionDefinition(Name)]
-public sealed class GameAssemblies
-{
-    public const string Name = "GameAssemblies";
+public sealed class GameAssemblies {
+  public const string Name = "GameAssemblies";
 }

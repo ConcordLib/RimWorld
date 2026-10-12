@@ -10,180 +10,179 @@ using Verse;
 namespace Concord.RimWorld;
 
 public static class RimWorldAdapter {
-    private static bool wired;
-    private static volatile IForeignPatchHost activeBridge;
-    private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
-    private static AssemblyLoadEventHandler lateActivationHandler;
-    private static int lateActivationAttempted;
-    private static IDetourBackend backendBeforeWire;
+  private static bool wired;
+  private static volatile IForeignPatchHost activeBridge;
+  private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
+  private static AssemblyLoadEventHandler lateActivationHandler;
+  private static int lateActivationAttempted;
+  private static IDetourBackend backendBeforeWire;
 
-    public static bool Ready { get; private set; }
+  public static bool Ready { get; private set; }
 
-    public static void Wire(ModContentPack content, ConcordSettings settings) {
-        WireContext context = new WireContext {
-            Settings = settings,
-            ModRootDir = content.RootDir,
-            Schedule = LongEventHandler.ExecuteWhenFinished,
-            LoadBridge = HarmonyProbe.TryLoadBridge,
-            Log = Log.Warning,
-            DialogOnce = text => Find.WindowStack.Add(new Dialog_MessageBox(text)),
-            ApplyEagerTier = () => {
-                PropertyRegistry registry = new PropertyRegistry();
-                RimWorldRuntime.Registry = registry;
-                RimWorldPatchApplier patchApplier = new RimWorldPatchApplier();
+  public static void Wire(ModContentPack content, ConcordSettings settings) {
+    WireContext context = new WireContext {
+      Settings = settings,
+      ModRootDir = content.RootDir,
+      Schedule = LongEventHandler.ExecuteWhenFinished,
+      LoadBridge = HarmonyProbe.TryLoadBridge,
+      Log = Log.Warning,
+      DialogOnce = text => Find.WindowStack.Add(new Dialog_MessageBox(text)),
+      ApplyEagerTier = () => {
+        PropertyRegistry registry = new PropertyRegistry();
+        RimWorldRuntime.Registry = registry;
+        RimWorldPatchApplier patchApplier = new RimWorldPatchApplier();
 
-                RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
-                PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, Log.Error);
-                Patcher.UseAttachedPropertyRegistry(propertyRegistry);
-            }
-        };
+        RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
+        PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, Log.Error);
+        Patcher.UseAttachedPropertyRegistry(propertyRegistry);
+      }
+    };
 
-        Wire(context);
+    Wire(context);
+  }
+
+  internal static void Wire(WireContext context) {
+    if (wired) {
+      return;
     }
 
-    internal static void Wire(WireContext context) {
-        if (wired) {
-            return;
-        }
+    wired = true;
 
-        wired = true;
-
-        int forgotten = ResolveCache.ForgetReflectionOnly();
-        if (forgotten > 0) {
-            context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
-        }
-
-        backendBeforeWire = DetourBackend.Current is RoutingDetourBackend leftover ? leftover.Inner : DetourBackend.Current;
-        RoutingDetourBackend router = new RoutingDetourBackend(backendBeforeWire, context.Log);
-        DetourBackend.Current = router;
-
-        try {
-            WireRouted(context, router);
-            Ready = true;
-        } catch {
-            DetourBackend.Current = backendBeforeWire;
-            backendBeforeWire = null;
-            wired = false;
-            throw;
-        }
+    int forgotten = ResolveCache.ForgetReflectionOnly();
+    if (forgotten > 0) {
+      context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
     }
 
-    private static void WireRouted(WireContext context, RoutingDetourBackend router) {
-        router.RouteEverything = context.Settings.RouteEverythingWhenHarmonyPresent;
+    backendBeforeWire = DetourBackend.Current is RoutingDetourBackend leftover ? leftover.Inner : DetourBackend.Current;
+    RoutingDetourBackend router = new RoutingDetourBackend(backendBeforeWire, context.Log);
+    DetourBackend.Current = router;
 
-        context.ApplyEagerTier();
+    try {
+      WireRouted(context, router);
+      Ready = true;
+    } catch {
+      DetourBackend.Current = backendBeforeWire;
+      backendBeforeWire = null;
+      wired = false;
+      throw;
+    }
+  }
 
-        if (context.Settings.BridgeRoutingEnabled) {
-            ActivateBridgeOrWaitForHarmony(context, router);
-        }
+  private static void WireRouted(WireContext context, RoutingDetourBackend router) {
+    router.RouteEverything = context.Settings.RouteEverythingWhenHarmonyPresent;
 
-        ContentionWatcher watcher = new ContentionWatcher(
-            router.RawPinnedTargets,
-            router.ContestedLostTargets,
-            target => ForeignOwners(target, context),
-            () => router.NotifierInstalled,
-            context.Log,
-            context.DialogOnce);
+    context.ApplyEagerTier();
 
-        // Patches now apply as they arrive, so there is no queue to drain. The watcher stays as a
-        // backstop for the case where the notifier hook could not install.
-        context.Schedule(() => {
-            watcher.RunCheckpoint();
-            context.Schedule(watcher.RunCheckpoint);
-        });
+    if (context.Settings.BridgeRoutingEnabled) {
+      ActivateBridgeOrWaitForHarmony(context, router);
     }
 
-    private static void ActivateBridgeOrWaitForHarmony(WireContext context, RoutingDetourBackend router) {
-        IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
-        if (bridge != null) {
-            activeBridge = bridge;
-            router.ActivateHost(bridge);
-            return;
-        }
+    ContentionWatcher watcher = new ContentionWatcher(
+        router.RawPinnedTargets,
+        router.ContestedLostTargets,
+        target => ForeignOwners(target, context),
+        () => router.NotifierInstalled,
+        context.Log,
+        context.DialogOnce);
 
-        lateActivationHandler = (sender, args) => OnAssemblyLoaded(context, args);
-        AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
+    // Patches now apply as they arrive, so there is no queue to drain. The watcher stays as a
+    // backstop for the case where the notifier hook could not install.
+    context.Schedule(() => {
+      watcher.RunCheckpoint();
+      context.Schedule(watcher.RunCheckpoint);
+    });
+  }
+
+  private static void ActivateBridgeOrWaitForHarmony(WireContext context, RoutingDetourBackend router) {
+    IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
+    if (bridge != null) {
+      activeBridge = bridge;
+      router.ActivateHost(bridge);
+      return;
     }
 
-    private static void OnAssemblyLoaded(WireContext context, AssemblyLoadEventArgs args) {
-        if (activeBridge != null) {
-            if (lateActivationHandler != null) {
-                AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-                lateActivationHandler = null;
-            }
+    lateActivationHandler = (sender, args) => OnAssemblyLoaded(context, args);
+    AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
+  }
 
-            return;
-        }
+  private static void OnAssemblyLoaded(WireContext context, AssemblyLoadEventArgs args) {
+    if (activeBridge != null) {
+      if (lateActivationHandler != null) {
+        AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
+        lateActivationHandler = null;
+      }
 
-        if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
-            return;
-        }
-
-        TryLateActivation(context);
+      return;
     }
 
-    private static IReadOnlyList<string> ForeignOwners(MethodBase target, WireContext context) {
-        IForeignPatchHost bridge = activeBridge;
-        if (bridge != null) {
-            return bridge.ForeignOwners(target);
-        }
-
-        reflectionLookup ??= ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(() => AppDomain.CurrentDomain.GetAssemblies(), context.Log);
-        return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
+    if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
+      return;
     }
 
-    internal static void TryLateActivation(WireContext context) {
-        if (Interlocked.CompareExchange(ref lateActivationAttempted, 1, 0) != 0) {
-            return;
-        }
+    TryLateActivation(context);
+  }
 
-        try {
-            IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
-            if (bridge == null) {
-                return;
-            }
-
-            activeBridge = bridge;
-
-            if (DetourBackend.Current is RoutingDetourBackend router) {
-                router.ActivateHost(bridge);
-            }
-        }
-        finally {
-            if (lateActivationHandler != null) {
-                AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-                lateActivationHandler = null;
-            }
-        }
+  private static IReadOnlyList<string> ForeignOwners(MethodBase target, WireContext context) {
+    IForeignPatchHost bridge = activeBridge;
+    if (bridge != null) {
+      return bridge.ForeignOwners(target);
     }
 
-    internal static void ResetForTests() {
-        wired = false;
-        Ready = false;
-        activeBridge = null;
-        reflectionLookup = null;
-        lateActivationAttempted = 0;
+    reflectionLookup ??= ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(() => AppDomain.CurrentDomain.GetAssemblies(), context.Log);
+    return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
+  }
 
-        if (lateActivationHandler != null) {
-            AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-            lateActivationHandler = null;
-        }
-
-        if (backendBeforeWire != null) {
-            DetourBackend.Current = backendBeforeWire;
-            backendBeforeWire = null;
-        }
+  internal static void TryLateActivation(WireContext context) {
+    if (Interlocked.CompareExchange(ref lateActivationAttempted, 1, 0) != 0) {
+      return;
     }
 
-    internal static bool HasLateActivationHandler => lateActivationHandler != null;
+    try {
+      IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
+      if (bridge == null) {
+        return;
+      }
+
+      activeBridge = bridge;
+
+      if (DetourBackend.Current is RoutingDetourBackend router) {
+        router.ActivateHost(bridge);
+      }
+    } finally {
+      if (lateActivationHandler != null) {
+        AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
+        lateActivationHandler = null;
+      }
+    }
+  }
+
+  internal static void ResetForTests() {
+    wired = false;
+    Ready = false;
+    activeBridge = null;
+    reflectionLookup = null;
+    lateActivationAttempted = 0;
+
+    if (lateActivationHandler != null) {
+      AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
+      lateActivationHandler = null;
+    }
+
+    if (backendBeforeWire != null) {
+      DetourBackend.Current = backendBeforeWire;
+      backendBeforeWire = null;
+    }
+  }
+
+  internal static bool HasLateActivationHandler => lateActivationHandler != null;
 }
 
 internal sealed class WireContext {
-    public ConcordSettings Settings;
-    public string ModRootDir;
-    public Action<Action> Schedule;
-    public Func<string, Action<string>, IForeignPatchHost> LoadBridge;
-    public Action<string> Log;
-    public Action<string> DialogOnce;
-    public Action ApplyEagerTier;
+  public ConcordSettings Settings;
+  public string ModRootDir;
+  public Action<Action> Schedule;
+  public Func<string, Action<string>, IForeignPatchHost> LoadBridge;
+  public Action<string> Log;
+  public Action<string> DialogOnce;
+  public Action ApplyEagerTier;
 }

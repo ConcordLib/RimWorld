@@ -1,0 +1,160 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [core-released]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      checks: write
+      packages: write
+    secrets: inherit
+
+  release:
+    name: semantic-release
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/miniconda /usr/local/share/powershell
+          sudo docker image prune -af
+          df -h /
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Bump the Concord pins for a Core release
+        if: github.event_name == 'repository_dispatch'
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION="${CORE_VERSION#v}"
+          test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
+
+          for package in concord.ref concord.runtime concord.harmony; do
+            for attempt in $(seq 1 40); do
+              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
+                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
+                break
+              fi
+              test "$attempt" -lt 40 || { echo "::error::$package $PACKAGE_VERSION never appeared on nuget.org"; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
+              sleep 30
+            done
+          done
+
+          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj Source/ConcordRimWorld/ConcordRimWorld.csproj Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj
+          git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
+          git push origin HEAD:main
+
+      - name: Stage RimWorld 1.5 refs
+        id: refs-15
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.5'] }}
+          dest: ${{ runner.temp }}/game-1.5
+
+      - name: Stage RimWorld 1.6 refs
+        id: refs-16
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.6'] }}
+          dest: ${{ runner.temp }}/game-1.6
+
+      - name: Stage RimWorld 1.7 refs
+        id: refs-17
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.7'] }}
+          dest: ${{ runner.temp }}/game-1.7
+
+      - name: Build every version
+        run: |
+          set -euo pipefail
+          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.5 "-p:GameManagedDir=${{ steps.refs-15.outputs.managed-dir }}"
+          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.6 "-p:GameManagedDir=${{ steps.refs-16.outputs.managed-dir }}"
+          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.7 "-p:GameManagedDir=${{ steps.refs-17.outputs.managed-dir }}"
+
+      - name: Package the mod
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg/Concord
+          rsync -a --exclude-from=.steamignore ./ /tmp/pkg/Concord/
+          (cd /tmp/pkg && zip -qr "$GITHUB_WORKSPACE/Concord.zip" Concord)
+          unzip -l "$GITHUB_WORKSPACE/Concord.zip"
+
+      - name: Install semantic-release
+        run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
+
+      - name: Set up SteamCMD
+        uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
+
+      - name: Restore Steam config
+        env:
+          STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+        run: |
+          mkdir -p "$STEAM_DIR/config"
+          printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
+          echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
+
+      - name: Record the tag before releasing
+        id: before
+        run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
+          STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
+        run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
+
+      - uses: RimWorks/mod-ci/.github/actions/discord-release@v4
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          mod-name: Concord
+          role-ids: ${{ vars.DISCORD_ROLE_IDS }}
+          workshop-id: '3758333473'
+          embed-color: 9B59B6
+          previous-tag: ${{ steps.before.outputs.tag }}
