@@ -4,24 +4,31 @@
     <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.23.0</ConcordVersion>
     <AssemblyName>ConcordRimWorld</AssemblyName>
     <RootNamespace>Concord.RimWorld</RootNamespace>
-    <OutputPath>../../Current/Assemblies</OutputPath>
+    <OutputPath>../../$(GameVersion)/Assemblies</OutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
+    <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
+    <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath>$(RimWorldManaged)/Assembly-CSharp.dll</HintPath>
+      <HintPath>$(GamecrateRefs)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>$(RimWorldManaged)/UnityEngine.CoreModule.dll</HintPath>
+    <Reference Include="UnityEngine.CoreModule" Condition="Exists('$(GamecrateRefs)/UnityEngine.CoreModule.dll')">
+      <HintPath>$(GamecrateRefs)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- GUI and GUIContent, which the main menu version readout draws through. -->
-    <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>$(RimWorldManaged)/UnityEngine.IMGUIModule.dll</HintPath>
+    <Reference Include="UnityEngine.IMGUIModule" Condition="Exists('$(GamecrateRefs)/UnityEngine.IMGUIModule.dll')">
+      <HintPath>$(GamecrateRefs)/UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- 1.7 ships the Unity API as one shim assembly instead of per-module ones. -->
+    <Reference Include="UnityStubs" Condition="Exists('$(GamecrateRefs)/UnityStubs.dll')">
+      <HintPath>$(GamecrateRefs)/UnityStubs.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
@@ -33,23 +40,31 @@
     <PackageReference Include="Concord.Ref" Version="0.24.2" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
-         RimWorld does not scan Current/Bridge for mod assemblies. -->
+         RimWorld does not scan <version>/Bridge for mod assemblies. -->
     <PackageReference Include="Concord.Harmony" Version="0.24.2" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Runtime" Version="0.24.2" GeneratePathProperty="true" ExcludeAssets="all" />
   </ItemGroup>
 
-  <!-- HarmonyProbe loads Current/Bridge/Concord.Harmony.dll by path after it finds a
-       supported Harmony, so the package's net472 asset has to land there. -->
-  <Target Name="StageHarmonyHost" AfterTargets="Build">
-    <Copy SourceFiles="$(PkgConcord_Harmony)/lib/net472/Concord.Harmony.dll" DestinationFolder="$(MSBuildThisFileDirectory)../../Current/Bridge" SkipUnchangedFiles="true" />
+  <Target Name="StagePinnedConcord" AfterTargets="Build" Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">
+    <Copy SourceFiles="$(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll" DestinationFiles="$(ModVersionDir)/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(PkgConcord_Harmony)/lib/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
   </Target>
 
-  <!-- Builds Core in its own MSBuild process, so its MinVer version cannot be stamped onto this
-       assembly, then stages the result the mod actually loads at runtime. Skipped when there is no
-       Core checkout beside this repo, which is how CI stages the published runtime instead. -->
   <Target Name="StageConcordRuntime" AfterTargets="Build" Condition="Exists('$(ConcordCoreDir)/Concord.slnx')">
     <Exec Command="dotnet build &quot;$(ConcordCoreDir)/Concord.slnx&quot; -c Release --verbosity quiet" />
-    <Error Condition="!Exists('$(ConcordCoreDir)/Assemblies/net472/Concord.dll')" Text="Core built but produced no Assemblies/net472/Concord.dll at $(ConcordCoreDir)." />
-    <Copy SourceFiles="$(ConcordCoreDir)/Assemblies/net472/Concord.dll" DestinationFiles="$(MSBuildThisFileDirectory)../../Current/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
+    <Error Condition="!Exists('$(ConcordCoreDir)/Assemblies/$(GameTfm)/Concord.dll')" Text="Core built but produced no Assemblies/$(GameTfm)/Concord.dll at $(ConcordCoreDir)." />
+    <Error Condition="!Exists('$(ConcordCoreDir)/src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll')" Text="Core built but produced no src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll at $(ConcordCoreDir)." />
+    <Copy SourceFiles="$(ConcordCoreDir)/Assemblies/$(GameTfm)/Concord.dll" DestinationFiles="$(ModVersionDir)/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ConcordCoreDir)/src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- An optional detour backend ships as a sibling file the mod probes for at runtime. It is never
+       referenced at compile time, and it must not land in <version>/Assemblies, which the game loads
+       and reflects over before any mod constructor runs. It replaces method bodies through
+       WaylithCLR, so only the net10.0 leg can carry one. Pass -p:DetourBackendSource=<path> to stage
+       one; with the property unset the target does not run and the mod ships without a backend. -->
+  <Target Name="StageDetourBackend" AfterTargets="Build" Condition="'$(GameTfm)' == 'net10.0' AND Exists('$(DetourBackendSource)')">
+    <Copy SourceFiles="$(DetourBackendSource)" DestinationFiles="$(ModVersionDir)/Backend/Concord.Host.Adapter.dll" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>

@@ -2,9 +2,9 @@ bin/
 obj/
 Concord.zip
 *.user
-Current/Assemblies/
-Current/Bridge/
-1.5/Assemblies/
+1.5/
+1.6/
+1.7/
 TestMod/Assemblies/
 test/ingame/ConcordHalfMod/Assemblies/
 test/ingame/HarmonyHalfMod/Assemblies/
@@ -13,3 +13,6 @@ test/ingame/HarmonyBreakerMod/Assemblies/
 
 # local in-game verification notes (kept out of git)
 VERIFICATION.md
+
+# local build overrides for an install this repo does not describe
+Source/Local.props

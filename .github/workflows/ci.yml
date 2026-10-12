@@ -1,315 +1,116 @@
-name: CI
+name: ci
 
 on:
-  push:
-    branches: [main]
+  workflow_call:
+    outputs:
+      image-refs:
+        description: JSON map of game version to the image that version compiled against
+        value: ${{ jobs.images.outputs.image-refs }}
   pull_request:
     branches: [main]
-  workflow_dispatch:
-  repository_dispatch:
-    types: [core-released]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build & Test (RW ${{ matrix.rw }})
-    runs-on: ubuntu-latest
+  images:
+    uses: RimWorks/mod-ci/.github/workflows/game-image.yml@v4
     permissions:
       contents: read
       packages: write
+    with:
+      artifact-prefix: ci-image-ref
+      image: ghcr.io/concordlib/rimworld-game
+      branches: |
+        1.5=version-1.5
+        1.6=public
+        1.7=unstable
+    secrets:
+      STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
+      STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+
+  build:
+    name: build
+    needs: images
+    uses: RimWorks/mod-ci/.github/workflows/dotnet-build.yml@v4
+    permissions:
+      contents: read
+      checks: write
+      packages: read
+    with:
+      solution: Concord.RimWorld.slnx
+      test: false
+      format: true
+      artifact-name: build-output
+      artifact-paths: |
+        [0-9].[0-9]/
+      game-images: ${{ needs.images.outputs.image-refs }}
+
+  test:
+    name: test ${{ matrix.version }}
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { rw: '1.6', branch: 'public' }
-          - { rw: '1.5', branch: 'version-1.5' }
-    continue-on-error: ${{ matrix.experimental == true }}
+        version: ['1.5', '1.6', '1.7']
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/miniconda /usr/local/share/powershell
-          sudo docker image prune -af
-          df -h /
-
-      - name: Stage RimWorld reference image
-        id: game
-        uses: RimWorks/steam-game-image-action@4062dbf182c73f34b59052a040f0564d63bfd566 # v3.1.0
-        with:
-          app-id: '294100'
-          branch: ${{ matrix.branch }}
-          steam-username: ${{ vars.STEAM_USERNAME }}
-          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-          image: ghcr.io/concordlib/rimworld-game
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
-          runnable: 'false'
-
-      - name: Extract game DLLs from the image
-        run: |
-          set -euo pipefail
-          # The action always sets image-ref: the version tag when it built, the
-          # branch-scoped latest-<branch> tag when the build-id gate skipped.
-          IMG="${{ steps.game.outputs.image-ref }}"
-          test -n "$IMG" || { echo "steam-game-image-action returned no image-ref" >&2; exit 1; }
-          docker create --name rwgame "$IMG"
-          mkdir -p /opt/rimworld
-          docker cp rwgame:/game/. /opt/rimworld/
-          docker rm -f rwgame
-          test -n "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)" || { echo "Assembly-CSharp.dll not found under /opt/rimworld after extract" >&2; exit 1; }
+      - uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
-      # Core dispatches about thirty seconds after it publishes, and nuget.org takes minutes to
-      # serve a new version, so a restore straight after the bump races the index and fails with
-      # NU1102 on whichever package landed last. Wait for every package the build pins.
-      - name: Apply dispatched Core version
-        if: github.event_name == 'repository_dispatch'
-        env:
-          CORE_VERSION: ${{ github.event.client_payload.core_version }}
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION="${CORE_VERSION#v}"
-          test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
-
-          for package in concord.ref concord.runtime concord.harmony; do
-            for attempt in $(seq 1 40); do
-              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
-                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
-                break
-              fi
-              test "$attempt" -lt 40 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
-              sleep 30
-            done
-          done
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-
-      - name: Cache NuGet
-        uses: actions/cache@v4
+      - name: Stage game assemblies
+        id: refs
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
         with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: ${{ runner.os }}-nuget-
+          image: ${{ fromJSON(needs.images.outputs.image-refs)[matrix.version] }}
+
+      - name: Point msbuild at this leg's version and refs
+        run: |
+          echo "GameVersion=${{ matrix.version }}" >> "$GITHUB_ENV"
+          echo "GameManagedDir=${{ steps.refs.outputs.managed-dir }}" >> "$GITHUB_ENV"
 
       - name: Install mono
+        if: matrix.version != '1.7'
         run: |
           sudo apt-get update
           sudo apt-get install -y mono-complete
 
-      - name: Build
-        run: |
-          set -euo pipefail
-          DLLDIR=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")
-          dotnet build Concord.RimWorld.slnx -c Release -p:RimWorldManaged="$DLLDIR"
+      - name: Test under mono
+        if: matrix.version != '1.7'
+        run: CONFIG=Release ./Source/run-net472.sh
 
-      - name: Test (net472 under mono)
-        run: |
-          set -euo pipefail
-          RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
-          TESTDLL=$(find Source/ConcordRimWorld.Tests/bin/Release -name ConcordRimWorld.Tests.dll | head -1)
-          mono "$RUNNER" "$TESTDLL"
+      - name: Test
+        if: matrix.version == '1.7'
+        run: >
+          dotnet test Source/ConcordRimWorld.Tests -c Release --nologo
+          --logger "trx;LogFileName=tests.trx" --results-directory "$RUNNER_TEMP/test-results"
 
-  release:
-    name: Release
-    needs: build-and-test
-    if: github.event_name == 'push' || github.event_name == 'repository_dispatch'
+      - name: Publish the test results
+        if: always() && matrix.version == '1.7'
+        uses: dorny/test-reporter@v3
+        with:
+          name: unit tests ${{ matrix.version }}
+          path: ${{ runner.temp }}/test-results/*.trx
+          reporter: dotnet-trx
+          fail-on-error: false
+
+  gate:
+    name: ci gate
+    if: always()
+    needs: [images, build, test]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: RimWorks/mod-ci/.github/actions/gate@v4
         with:
-          fetch-depth: 0
-          # The repository_dispatch path commits and pushes the Core package-version bump.
-          persist-credentials: true
-
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/share/miniconda /usr/local/share/powershell
-          sudo docker image prune -af
-          df -h /
-
-      # Core dispatches about thirty seconds after it publishes, and nuget.org takes minutes to
-      # serve a new version, so a restore straight after the bump races the index and fails with
-      # NU1102 on whichever package landed last. Wait for every package the build pins.
-      - name: Synthetic bump for Core release
-        if: github.event_name == 'repository_dispatch'
-        env:
-          CORE_VERSION: ${{ github.event.client_payload.core_version }}
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION="${CORE_VERSION#v}"
-          test -n "$PACKAGE_VERSION" || { echo "core-released did not provide a version" >&2; exit 1; }
-
-          for package in concord.ref concord.runtime concord.harmony; do
-            for attempt in $(seq 1 40); do
-              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
-                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
-                break
-              fi
-              test "$attempt" -lt 40 || { echo "$package $PACKAGE_VERSION never appeared on nuget.org." >&2; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
-              sleep 30
-            done
-          done
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj Source/ConcordRimWorld/ConcordRimWorld.csproj Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj
-          git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
-          git push origin HEAD:main
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Stage RimWorld reference image
-        id: game
-        uses: RimWorks/steam-game-image-action@4062dbf182c73f34b59052a040f0564d63bfd566 # v3.1.0
-        with:
-          app-id: '294100'
-          branch: public
-          steam-username: ${{ vars.STEAM_USERNAME }}
-          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-          image: ghcr.io/concordlib/rimworld-game
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
-          runnable: 'false'
-
-      - name: Extract game DLLs from the image
-        run: |
-          set -euo pipefail
-          # The action always sets image-ref: the version tag when it built, the
-          # branch-scoped latest-<branch> tag when the build-id gate skipped.
-          IMG="${{ steps.game.outputs.image-ref }}"
-          test -n "$IMG" || { echo "steam-game-image-action returned no image-ref" >&2; exit 1; }
-          docker create --name rwgame "$IMG"
-          mkdir -p /opt/rimworld
-          docker cp rwgame:/game/. /opt/rimworld/
-          docker rm -f rwgame
-          test -n "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)" || { echo "Assembly-CSharp.dll not found under /opt/rimworld after extract" >&2; exit 1; }
-
-      - name: Build the mod
-        run: |
-          set -euo pipefail
-          DLLDIR=$(dirname "$(find /opt/rimworld -name Assembly-CSharp.dll | head -1)")
-          dotnet build Concord.RimWorld.slnx -c Release -p:RimWorldManaged="$DLLDIR"
-
-      # Fetch the runtime straight from nuget.org rather than reading ~/.nuget/packages. The cache
-      # is restored with restore-keys, so its newest Concord.Runtime is whatever an earlier run
-      # happened to leave there. That shipped a 0.9.0 runtime for four releases while the adapter
-      # moved on, and any mod compiled against a later Core failed to load against it.
-      # Core dispatches a release roughly thirty seconds after publishing, and nuget.org takes
-      # minutes to serve a new version, so the wanted version is routinely missing on the first
-      # look. Retry rather than fail the release.
-      - name: Stage the shipped runtime dll
-        env:
-          CORE_VERSION: ${{ github.event.client_payload.core_version }}
-        run: |
-          set -euo pipefail
-          WANT="${CORE_VERSION#v}"
-          INDEX=https://api.nuget.org/v3-flatcontainer/concord.runtime/index.json
-          VERSION=""
-          for attempt in $(seq 1 40); do
-            BODY=$(curl -sS "$INDEX" 2>/dev/null || true)
-            if [ -n "$BODY" ]; then
-              if [ -n "$WANT" ]; then
-                if printf '%s' "$BODY" | jq -e --arg v "$WANT" '.versions | index($v) != null' >/dev/null 2>&1; then
-                  VERSION="$WANT"
-                  break
-                fi
-              else
-                VERSION=$(printf '%s' "$BODY" | jq -r '[.versions[] | select(contains("-") | not)] | last')
-                if [ -n "$VERSION" ] && [ "$VERSION" != "null" ]; then
-                  break
-                fi
-                VERSION=""
-              fi
-            fi
-            echo "Concord.Runtime ${WANT:-latest} is not on nuget.org yet; retrying in 30s ($attempt/40)"
-            sleep 30
-          done
-          test -n "$VERSION" || { echo "Concord.Runtime ${WANT:-latest} never appeared on nuget.org." >&2; exit 1; }
-
-          echo "Staging Concord.Runtime $VERSION"
-          for attempt in $(seq 1 5); do
-            curl -sSf "https://api.nuget.org/v3-flatcontainer/concord.runtime/$VERSION/concord.runtime.$VERSION.nupkg" \
-              -o /tmp/concord.runtime.nupkg && break
-            echo "Download failed; retrying in 10s ($attempt/5)"
-            sleep 10
-          done
-          test -s /tmp/concord.runtime.nupkg || { echo "Could not download Concord.Runtime $VERSION." >&2; exit 1; }
-
-          unzip -p /tmp/concord.runtime.nupkg 'lib/net472/Concord.dll' > Current/Assemblies/0Concord.dll
-          test -s Current/Assemblies/0Concord.dll || { echo "Concord.Runtime $VERSION ships no lib/net472/Concord.dll." >&2; exit 1; }
-
-      # Same exclude list Steam uploads through, so the zip and the Workshop item match.
-      # No ! lines in .steamignore: --exclude-from reads those differently than the plugin.
-      - name: Package the mod
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/pkg/Concord
-          rsync -a --exclude-from=.steamignore ./ /tmp/pkg/Concord/
-          (cd /tmp/pkg && zip -qr "$GITHUB_WORKSPACE/Concord.zip" Concord)
-          unzip -l "$GITHUB_WORKSPACE/Concord.zip"
-
-      - name: Install semantic-release
-        run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
-
-      - name: Set up SteamCMD
-        uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
-
-      - name: Restore Steam config
-        env:
-          STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-        run: |
-          mkdir -p "$STEAM_DIR/config"
-          printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
-          echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
-
-      - name: Record the tag before releasing
-        id: before
-        run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
-
-      - name: Run semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
-          STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
-          STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
-        run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
-
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@v1.10
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          mod-name: Concord
-          role-ids: ${{ vars.DISCORD_ROLE_IDS }}
-          workshop-id: '3758333473'
-          embed-color: 9B59B6
-          previous-tag: ${{ steps.before.outputs.tag }}
+          results: ${{ join(needs.*.result, ' ') }}

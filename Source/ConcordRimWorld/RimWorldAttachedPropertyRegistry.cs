@@ -8,31 +8,31 @@ using Verse;
 namespace Concord.RimWorld;
 
 public sealed class RimWorldAttachedPropertyRegistry : IAttachedPropertyRegistry {
-    private readonly PropertyRegistry registry;
+  private readonly PropertyRegistry registry;
 
-    public RimWorldAttachedPropertyRegistry(PropertyRegistry registry) {
-        this.registry = registry;
+  public RimWorldAttachedPropertyRegistry(PropertyRegistry registry) {
+    this.registry = registry;
+  }
+
+  public void RegisterAttachedProperty(Type declarationType, Type baseType, string name, Type valueType, IAttachedSlot slot) {
+    string key = HarmonyProbe.SimpleName(declarationType.Assembly) + "." + name;
+    if (!IsPersisted(baseType)) {
+      Log.Warning("[Concord.RimWorld] Attached field '" + declarationType.FullName + "." + name + "' targets " + baseType.Name + ", which Concord does not scribe. It will work, but it will not be saved. Concord hooks Thing, Faction, WorldObject, Hediff, ThingComp, MapComponent, WorldComponent and GameComponent.");
     }
 
-    public void RegisterAttachedProperty(Type declarationType, Type baseType, string name, Type valueType, IAttachedSlot slot) {
-        string key = HarmonyProbe.SimpleName(declarationType.Assembly) + "." + name;
-        if (!IsPersisted(baseType)) {
-            Log.Warning("[Concord.RimWorld] Attached field '" + declarationType.FullName + "." + name + "' targets " + baseType.Name + ", which Concord does not scribe. It will work, but it will not be saved. Concord hooks Thing, Faction, WorldObject, Hediff, ThingComp, MapComponent, WorldComponent and GameComponent.");
-        }
-
-        try {
-            registry.Add(baseType, key, valueType, null, slot);
-        } catch (Exception e) {
-            Log.Error("[Concord.RimWorld] Attached field '" + declarationType.FullName + "." + name + "' will not be saved: " + e.Message);
-        }
+    try {
+      registry.Add(baseType, key, valueType, null, slot);
+    } catch (Exception e) {
+      Log.Error("[Concord.RimWorld] Attached field '" + declarationType.FullName + "." + name + "' will not be saved: " + e.Message);
     }
+  }
 
-    private static readonly Type[] ScribedRoots = {
+  private static readonly Type[] scribedRoots = [
         typeof(Thing), typeof(Faction), typeof(WorldObject), typeof(Hediff),
         typeof(ThingComp), typeof(MapComponent), typeof(WorldComponent), typeof(GameComponent),
-    };
+    ];
 
-    private static bool IsPersisted(Type baseType) {
-        return Array.Exists(ScribedRoots, root => root.IsAssignableFrom(baseType));
-    }
+  private static bool IsPersisted(Type baseType) {
+    return Array.Exists(scribedRoots, root => root.IsAssignableFrom(baseType));
+  }
 }

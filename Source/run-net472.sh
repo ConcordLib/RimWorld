@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 
 command -v mono >/dev/null || { echo "mono is not installed" >&2; exit 1; }
 
-dotnet build ConcordRimWorld.Tests -c "$CONFIG" >/dev/null
+dotnet build ConcordRimWorld.Tests -c "$CONFIG" -v q --nologo
 
 RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -path '*net472*' | sort -V | tail -1)
 [[ -n "$RUNNER" ]] || { echo "xunit.runner.console not restored" >&2; exit 1; }
@@ -20,5 +20,5 @@ RUNNER=$(find ~/.nuget/packages/xunit.runner.console -name xunit.console.exe -pa
 args=()
 [[ -n "${1:-}" ]] && args=(-class "Concord.RimWorld.Tests.$1")
 
-cd "ConcordRimWorld.Tests/bin/$CONFIG"
+cd "ConcordRimWorld.Tests/bin/$CONFIG/net472"
 mono "$RUNNER" ConcordRimWorld.Tests.dll -parallel none "${args[@]}"

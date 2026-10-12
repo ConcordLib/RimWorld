@@ -5,151 +5,123 @@ using System.Reflection;
 
 namespace Concord.RimWorld;
 
-public static class ReflectionHarmonyObserver
-{
-    public static Func<MethodBase, IReadOnlyList<string>> TryCreateForeignOwnerLookup(
-        Func<Assembly[]> loadedAssemblies,
-        Action<string> log)
-    {
-        Assembly harmonyAssembly = loadedAssemblies()
-            .FirstOrDefault(assembly => HarmonyProbe.SimpleName(assembly) == "0Harmony");
+public static class ReflectionHarmonyObserver {
+  public static Func<MethodBase, IReadOnlyList<string>> TryCreateForeignOwnerLookup(
+      Func<Assembly[]> loadedAssemblies,
+      Action<string> log) {
+    Assembly harmonyAssembly = loadedAssemblies()
+        .FirstOrDefault(assembly => HarmonyProbe.SimpleName(assembly) == "0Harmony");
 
-        // No Harmony means no foreign owners to report. The caller retries on every checkpoint so
-        // a late-loading Harmony still gets picked up, which is why this one stays silent.
-        if (harmonyAssembly == null)
-        {
-            return null;
-        }
-
-        Type patchProcessorType = harmonyAssembly.GetType("HarmonyLib.PatchProcessor");
-        if (patchProcessorType == null)
-        {
-            log("[Concord.RimWorld] ReflectionHarmonyObserver: HarmonyLib.PatchProcessor not found");
-            return null;
-        }
-
-        MethodInfo getPatchInfoMethod = patchProcessorType.GetMethod(
-            "GetPatchInfo",
-            BindingFlags.Public | BindingFlags.Static,
-            null,
-            new Type[] { typeof(MethodBase) },
-            null);
-
-        if (getPatchInfoMethod == null)
-        {
-            log("[Concord.RimWorld] ReflectionHarmonyObserver: PatchProcessor.GetPatchInfo not found");
-            return null;
-        }
-
-        return (MethodBase target) => GetForeignOwners(target, getPatchInfoMethod, log);
+    // No Harmony means no foreign owners to report. The caller retries on every checkpoint so
+    // a late-loading Harmony still gets picked up, which is why this one stays silent.
+    if (harmonyAssembly == null) {
+      return null;
     }
 
-    private static IReadOnlyList<string> GetForeignOwners(
-        MethodBase target,
-        MethodInfo getPatchInfoMethod,
-        Action<string> log)
-    {
-        List<string> owners = new List<string>();
+    Type patchProcessorType = harmonyAssembly.GetType("HarmonyLib.PatchProcessor");
+    if (patchProcessorType == null) {
+      log("[Concord.RimWorld] ReflectionHarmonyObserver: HarmonyLib.PatchProcessor not found");
+      return null;
+    }
 
-        try
-        {
-            object patchInfo = getPatchInfoMethod.Invoke(null, new object[] { target });
-            if (patchInfo == null)
-            {
-                return owners.AsReadOnly();
-            }
+    MethodInfo getPatchInfoMethod = patchProcessorType.GetMethod(
+        "GetPatchInfo",
+        BindingFlags.Public | BindingFlags.Static,
+        null,
+        [typeof(MethodBase)],
+        null);
 
-            Type patchesType = patchInfo.GetType();
-            string[] memberNames = { "Prefixes", "Postfixes", "Transpilers", "Finalizers", "InnerPrefixes", "InnerPostfixes" };
+    if (getPatchInfoMethod == null) {
+      log("[Concord.RimWorld] ReflectionHarmonyObserver: PatchProcessor.GetPatchInfo not found");
+      return null;
+    }
 
-            foreach (string memberName in memberNames)
-            {
-                object patchCollection = GetMemberValue(patchInfo, patchesType, memberName);
-                if (patchCollection == null)
-                {
-                    continue;
-                }
+    return (MethodBase target) => GetForeignOwners(target, getPatchInfoMethod, log);
+  }
 
-                ExtractOwnersFromCollection(patchCollection, owners, log);
-            }
-        }
-        catch (Exception e)
-        {
-            log($"[Concord.RimWorld] ReflectionHarmonyObserver: Error getting patch info: {e}");
-        }
+  private static IReadOnlyList<string> GetForeignOwners(
+      MethodBase target,
+      MethodInfo getPatchInfoMethod,
+      Action<string> log) {
+    List<string> owners = new List<string>();
 
+    try {
+      object patchInfo = getPatchInfoMethod.Invoke(null, [target]);
+      if (patchInfo == null) {
         return owners.AsReadOnly();
+      }
+
+      Type patchesType = patchInfo.GetType();
+      string[] memberNames = ["Prefixes", "Postfixes", "Transpilers", "Finalizers", "InnerPrefixes", "InnerPostfixes"];
+
+      foreach (string memberName in memberNames) {
+        object patchCollection = GetMemberValue(patchInfo, patchesType, memberName);
+        if (patchCollection == null) {
+          continue;
+        }
+
+        ExtractOwnersFromCollection(patchCollection, owners, log);
+      }
+    } catch (Exception e) {
+      log($"[Concord.RimWorld] ReflectionHarmonyObserver: Error getting patch info: {e}");
     }
 
-    private static object GetMemberValue(object instance, Type type, string memberName)
-    {
-        FieldInfo field = type.GetField(memberName, BindingFlags.Public | BindingFlags.Instance);
-        if (field != null)
-        {
-            return field.GetValue(instance);
-        }
+    return owners.AsReadOnly();
+  }
 
-        PropertyInfo property = type.GetProperty(memberName, BindingFlags.Public | BindingFlags.Instance);
-        if (property != null)
-        {
-            return property.GetValue(instance);
-        }
-
-        return null;
+  private static object GetMemberValue(object instance, Type type, string memberName) {
+    FieldInfo field = type.GetField(memberName, BindingFlags.Public | BindingFlags.Instance);
+    if (field != null) {
+      return field.GetValue(instance);
     }
 
-    private static void ExtractOwnersFromCollection(object collection, List<string> owners, Action<string> log)
-    {
-        try
-        {
-            Type collectionType = collection.GetType();
-            PropertyInfo countProperty = collectionType.GetProperty("Count");
-            if (countProperty == null)
-            {
-                return;
-            }
-
-            int count = (int)countProperty.GetValue(collection);
-            PropertyInfo indexerProperty = collectionType.GetProperty("Item");
-            if (indexerProperty == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                object patch = indexerProperty.GetValue(collection, new object[] { i });
-                if (patch == null)
-                {
-                    continue;
-                }
-
-                Type patchType = patch.GetType();
-                FieldInfo ownerField = patchType.GetField("owner", BindingFlags.Public | BindingFlags.Instance);
-                string owner = null;
-
-                if (ownerField != null)
-                {
-                    owner = ownerField.GetValue(patch) as string;
-                }
-                else
-                {
-                    PropertyInfo ownerProperty = patchType.GetProperty("owner", BindingFlags.Public | BindingFlags.Instance);
-                    if (ownerProperty != null)
-                    {
-                        owner = ownerProperty.GetValue(patch) as string;
-                    }
-                }
-
-                if (owner != null && !owners.Contains(owner))
-                {
-                    owners.Add(owner);
-                }
-            }
-        }
-        catch (Exception e)
-        {
-            log($"[Concord.RimWorld] ReflectionHarmonyObserver: Error extracting owners: {e}");
-        }
+    PropertyInfo property = type.GetProperty(memberName, BindingFlags.Public | BindingFlags.Instance);
+    if (property != null) {
+      return property.GetValue(instance);
     }
+
+    return null;
+  }
+
+  private static void ExtractOwnersFromCollection(object collection, List<string> owners, Action<string> log) {
+    try {
+      Type collectionType = collection.GetType();
+      PropertyInfo countProperty = collectionType.GetProperty("Count");
+      if (countProperty == null) {
+        return;
+      }
+
+      int count = (int)countProperty.GetValue(collection);
+      PropertyInfo indexerProperty = collectionType.GetProperty("Item");
+      if (indexerProperty == null) {
+        return;
+      }
+
+      for (int i = 0; i < count; i++) {
+        object patch = indexerProperty.GetValue(collection, [i]);
+        if (patch == null) {
+          continue;
+        }
+
+        Type patchType = patch.GetType();
+        FieldInfo ownerField = patchType.GetField("owner", BindingFlags.Public | BindingFlags.Instance);
+        string owner = null;
+
+        if (ownerField != null) {
+          owner = ownerField.GetValue(patch) as string;
+        } else {
+          PropertyInfo ownerProperty = patchType.GetProperty("owner", BindingFlags.Public | BindingFlags.Instance);
+          if (ownerProperty != null) {
+            owner = ownerProperty.GetValue(patch) as string;
+          }
+        }
+
+        if (owner != null && !owners.Contains(owner)) {
+          owners.Add(owner);
+        }
+      }
+    } catch (Exception e) {
+      log($"[Concord.RimWorld] ReflectionHarmonyObserver: Error extracting owners: {e}");
+    }
+  }
 }

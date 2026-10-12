@@ -1,14 +1,30 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
   <PropertyGroup>
-    <!-- CI overrides this to the staged steam-game-image dir; locally it points at the install. -->
-    <RimWorldManaged Condition="'$(RimWorldManaged)' == ''">/mnt/games/SteamLibrary/steamapps/common/RimWorld/RimWorldLinux_Data/Managed</RimWorldManaged>
-    <TargetFramework>net472</TargetFramework>
+    <GameVersion Condition="'$(GameVersion)' == ''">1.6</GameVersion>
+    <GamecrateCache Condition="'$(GamecrateCache)' == '' And '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)</GamecrateCache>
+    <GamecrateCache Condition="'$(GamecrateCache)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.cache'))</GamecrateCache>
+    <GamecrateRefs Condition="'$(GamecrateRefs)' == '' And '$(GameManagedDir)' != ''">$(GameManagedDir)</GamecrateRefs>
+    <GamecrateRefs Condition="'$(GamecrateRefs)' == ''">$([System.IO.Path]::Combine($(GamecrateCache), 'gamecrate', 'refs', 'version', 'rimworld', $(GameVersion)))</GamecrateRefs>
+    <!-- 1.7 runs WaylithCLR at net10.0; 1.5 and 1.6 run Unity's mono at net472 -->
+    <GameTfm Condition="'$(GameVersion)' == '1.7'">net10.0</GameTfm>
+    <GameTfm Condition="'$(GameTfm)' == ''">net472</GameTfm>
+    <HasGameRefs>false</HasGameRefs>
+    <HasGameRefs Condition="Exists('$(GamecrateRefs)/Assembly-CSharp.dll')">true</HasGameRefs>
+    <TargetFramework>$(GameTfm)</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DefineConstants>$(DefineConstants);RW_$(GameVersion.Replace('.','_'))</DefineConstants>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.5'">version-1.5</GameSteamBranch>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.6'">public</GameSteamBranch>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.7'">unstable</GameSteamBranch>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(GameTfm)' == 'net472'">
     <PackageReference Include="IsExternalInit" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+  <Target Name="RequireGameRefs" BeforeTargets="ResolveAssemblyReferences" Condition="'$(HasGameRefs)' != 'true'">
+    <Error Text="no rimworld $(GameVersion) assemblies at $(GamecrateRefs). run: gamecrate steam build --game rimworld --beta $(GameSteamBranch)" />
+  </Target>
 </Project>
