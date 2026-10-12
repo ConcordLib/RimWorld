@@ -158,9 +158,9 @@ public class DetourBackendLoaderTests {
         new AssemblyName("Fixture.InMemory"),
         AssemblyBuilderAccess.Run);
 #else
-        Assembly inMemory = AssemblyBuilder.DefineDynamicAssembly(
-            new AssemblyName("Fixture.InMemory"),
-            AssemblyBuilderAccess.Run);
+    Assembly inMemory = AssemblyBuilder.DefineDynamicAssembly(
+        new AssemblyName("Fixture.InMemory"),
+        AssemblyBuilderAccess.Run);
 #endif
 
     Assert.Empty(DetourBackendLoader.AssemblyDirectories(new Assembly[] { null, inMemory }));
@@ -198,9 +198,9 @@ public class DetourBackendLoaderTests {
         AssemblyBuilderAccess.Save,
         dir);
 #else
-        PersistedAssemblyBuilder assembly = new PersistedAssemblyBuilder(
-            new AssemblyName(assemblyName),
-            typeof(object).Assembly);
+    PersistedAssemblyBuilder assembly = new PersistedAssemblyBuilder(
+        new AssemblyName(assemblyName),
+        typeof(object).Assembly);
 #endif
 
     if (concordBuild != null) {
@@ -212,7 +212,7 @@ public class DetourBackendLoaderTests {
 #if NETFRAMEWORK
     ModuleBuilder module = assembly.DefineDynamicModule(fileName, fileName);
 #else
-        ModuleBuilder module = assembly.DefineDynamicModule(fileName);
+    ModuleBuilder module = assembly.DefineDynamicModule(fileName);
 #endif
     TypeBuilder type = module.DefineType(
         "Concord.Host.Adapter.AdapterEntryPoint",

@@ -9,11 +9,11 @@ namespace Concord.RimWorld;
 
 public static class HarmonyProbe {
 #if RW_1_7
-    internal const string VersionDir = "1.7";
+  internal const string VersionDir = "1.7";
 #elif RW_1_6
   internal const string VersionDir = "1.6";
 #elif RW_1_5
-    internal const string VersionDir = "1.5";
+  internal const string VersionDir = "1.5";
 #else
 #error GameVersion has no VersionDir
 #endif

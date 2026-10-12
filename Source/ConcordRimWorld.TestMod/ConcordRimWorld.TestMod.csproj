@@ -16,6 +16,10 @@
       <HintPath>$(GamecrateRefs)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityStubs" Condition="Exists('$(GamecrateRefs)/UnityStubs.dll')">
+      <HintPath>$(GamecrateRefs)/UnityStubs.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
