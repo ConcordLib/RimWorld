@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
+    <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
     <!-- The API surface the patches compile against. Keep in step with the Core checkout that
          StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
     <PackageReference Include="Concord.Ref" Version="0.25.0" PrivateAssets="all" />
