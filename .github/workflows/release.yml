@@ -96,7 +96,7 @@ jobs:
           PACKAGE_VERSION="${CORE_VERSION#v}"
           test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
 
-          for package in concord.ref concord.runtime concord.harmony; do
+          for package in concord.ref concord.runtime concord.harmony concord.host.adapter; do
             for attempt in $(seq 1 40); do
               if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
                 | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
@@ -112,6 +112,7 @@ jobs:
           dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
+          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Host.Adapter --version "$PACKAGE_VERSION" --no-restore
           dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
 
           git config user.name "github-actions[bot]"
