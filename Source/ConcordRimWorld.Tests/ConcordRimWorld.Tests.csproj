@@ -16,7 +16,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageReference Include="xunit.runner.console" Version="2.9.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" Condition="'$(GameTfm)' == 'net472'" />
-    <PackageReference Include="Concord.Runtime" Version="0.25.0" Condition="'$(UsePinnedConcord)' == 'true'" />
+    <PackageReference Include="Concord.Runtime" Version="0.26.0" Condition="'$(UsePinnedConcord)' == 'true'" />
     <PackageReference Include="Lib.Harmony" Version="3.0.*-*" />
   </ItemGroup>
 

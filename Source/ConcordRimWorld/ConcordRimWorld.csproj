@@ -10,6 +10,7 @@
     <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
     <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
     <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
+    <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0'">$(PkgConcord_Host_Adapter)/lib/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,12 +38,13 @@
     <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
     <!-- The API surface the patches compile against. Keep in step with the Core checkout that
          StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
-    <PackageReference Include="Concord.Ref" Version="0.25.0" PrivateAssets="all" />
+    <PackageReference Include="Concord.Ref" Version="0.26.0" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
          RimWorld does not scan <version>/Bridge for mod assemblies. -->
-    <PackageReference Include="Concord.Harmony" Version="0.25.0" GeneratePathProperty="true" ExcludeAssets="all" />
-    <PackageReference Include="Concord.Runtime" Version="0.25.0" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Harmony" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Runtime" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Host.Adapter" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" Condition="'$(GameTfm)' == 'net10.0'" />
   </ItemGroup>
 
   <Target Name="StagePinnedConcord" AfterTargets="Build" Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">
@@ -58,12 +60,10 @@
     <Copy SourceFiles="$(ConcordCoreDir)/src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
   </Target>
 
-  <!-- An optional detour backend ships as a sibling file the mod probes for at runtime. It is never
-       referenced at compile time, and it must not land in <version>/Assemblies, which the game loads
-       and reflects over before any mod constructor runs. It replaces method bodies through
-       WaylithCLR, so only the net10.0 leg can carry one. Pass -p:DetourBackendSource=<path> to stage
-       one; with the property unset the target does not run and the mod ships without a backend. -->
-  <Target Name="StageDetourBackend" AfterTargets="Build" Condition="'$(GameTfm)' == 'net10.0' AND Exists('$(DetourBackendSource)')">
+  <!-- Probed at runtime, so it stays out of <version>/Assemblies, which the game reflects over
+       before any mod constructor runs. Override the source with -p:DetourBackendSource=<path>. -->
+  <Target Name="StageDetourBackend" AfterTargets="Build" Condition="'$(GameTfm)' == 'net10.0'">
+    <Error Condition="!Exists('$(DetourBackendSource)')" Text="The 1.7 build needs the body-replacement backend, and there is none at $(DetourBackendSource). Point -p:ConcordCoreDir at a Core checkout whose Concord.slnx builds src/Concord.Host.Adapter, or restore the Concord.Host.Adapter package, or pass -p:DetourBackendSource=&lt;path&gt;." />
     <Copy SourceFiles="$(DetourBackendSource)" DestinationFiles="$(ModVersionDir)/Backend/Concord.Host.Adapter.dll" SkipUnchangedFiles="true" />
   </Target>
 
