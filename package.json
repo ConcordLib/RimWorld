@@ -1,10 +1,23 @@
 {
   "name": "concord-rimworld",
-  "version": "0.0.0-semantically-released",
   "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Runtime patching library for RimWorld mods.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ConcordLib/RimWorld"
+  },
+  "scripts": {
+    "release": "semantic-release"
+  },
   "devDependencies": {
-    "semantic-release": "^24",
-    "conventional-changelog-conventionalcommits": "^9",
-    "semantic-release-steam": "^2.1.0"
+    "@rimworks/mod-ci": "github:RimWorks/mod-ci#v4",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.10",
+    "@semantic-release/release-notes-generator": "^14.0.1",
+    "semantic-release": "^25.0.9",
+    "semantic-release-steam": "^2.3.0"
   }
 }

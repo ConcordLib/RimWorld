@@ -16,3 +16,6 @@ VERIFICATION.md
 
 # local build overrides for an install this repo does not describe
 Source/Local.props
+About/PublishStamp.txt
+dist/
+node_modules/
