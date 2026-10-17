@@ -81,21 +81,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Generate a push token for the pin bump
-        if: github.event_name == 'repository_dispatch'
-        id: apptoken
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
-        with:
-          app-id: ${{ vars.RUNTIME_DISPATCH_APP_ID }}
-          private-key: ${{ secrets.RUNTIME_DISPATCH_APP_PRIVATE_KEY }}
-          owner: ConcordLib
-          repositories: RimWorld
-
-      - name: Bump the Concord pins for a Core release
+      - name: Wait for the Core packages on nuget.org
         if: github.event_name == 'repository_dispatch'
         env:
           CORE_VERSION: ${{ github.event.client_payload.core_version }}
-          PUSH_TOKEN: ${{ steps.apptoken.outputs.token }}
         run: |
           set -euo pipefail
           PACKAGE_VERSION="${CORE_VERSION#v}"
@@ -112,19 +101,6 @@ jobs:
               sleep 30
             done
           done
-
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Host.Adapter --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj Source/ConcordRimWorld/ConcordRimWorld.csproj Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj
-          git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
-          git push "https://x-access-token:$PUSH_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:main
 
       - name: Install release dependencies
         run: npm ci --ignore-scripts
