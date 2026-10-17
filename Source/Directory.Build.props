@@ -2,6 +2,7 @@
   <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
   <PropertyGroup>
     <GameVersion Condition="'$(GameVersion)' == ''">1.6</GameVersion>
+    <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.*</ConcordVersion>
     <GamecrateCache Condition="'$(GamecrateCache)' == '' And '$(XDG_CACHE_HOME)' != ''">$(XDG_CACHE_HOME)</GamecrateCache>
     <GamecrateCache Condition="'$(GamecrateCache)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.cache'))</GamecrateCache>
     <GamecrateRefs Condition="'$(GamecrateRefs)' == '' And '$(GameManagedDir)' != ''">$(GameManagedDir)</GamecrateRefs>

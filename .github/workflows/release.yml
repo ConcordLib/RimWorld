@@ -53,6 +53,11 @@ jobs:
       issues: write
       pull-requests: write
       packages: read
+    outputs:
+      published: ${{ steps.after.outputs.published }}
+      version: ${{ steps.after.outputs.version }}
+      tag: ${{ steps.after.outputs.tag }}
+      previous-tag: ${{ steps.before.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -76,21 +81,10 @@ jobs:
         with:
           node-version: 22
 
-      - name: Generate a push token for the pin bump
-        if: github.event_name == 'repository_dispatch'
-        id: apptoken
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
-        with:
-          app-id: ${{ vars.RUNTIME_DISPATCH_APP_ID }}
-          private-key: ${{ secrets.RUNTIME_DISPATCH_APP_PRIVATE_KEY }}
-          owner: ConcordLib
-          repositories: RimWorld
-
-      - name: Bump the Concord pins for a Core release
+      - name: Wait for the Core packages on nuget.org
         if: github.event_name == 'repository_dispatch'
         env:
           CORE_VERSION: ${{ github.event.client_payload.core_version }}
-          PUSH_TOKEN: ${{ steps.apptoken.outputs.token }}
         run: |
           set -euo pipefail
           PACKAGE_VERSION="${CORE_VERSION#v}"
@@ -108,18 +102,8 @@ jobs:
             done
           done
 
-          dotnet add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Harmony --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Runtime --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld/ConcordRimWorld.csproj package Concord.Host.Adapter --version "$PACKAGE_VERSION" --no-restore
-          dotnet add Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj package Concord.Ref --version "$PACKAGE_VERSION" --no-restore
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Source/ConcordRimWorld.Tests/ConcordRimWorld.Tests.csproj Source/ConcordRimWorld/ConcordRimWorld.csproj Source/ConcordRimWorld.TestMod/ConcordRimWorld.TestMod.csproj
-          git commit --allow-empty -m "fix(core): rebuild against Concord ${CORE_VERSION:-latest}"
-          git push "https://x-access-token:$PUSH_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:main
+      - name: Install release dependencies
+        run: npm ci --ignore-scripts
 
       - name: Stage RimWorld 1.5 refs
         id: refs-15
@@ -142,35 +126,6 @@ jobs:
           image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.7'] }}
           dest: ${{ runner.temp }}/game-1.7
 
-      - name: Build every version
-        run: |
-          set -euo pipefail
-          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.5 "-p:GameManagedDir=${{ steps.refs-15.outputs.managed-dir }}"
-          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.6 "-p:GameManagedDir=${{ steps.refs-16.outputs.managed-dir }}"
-          dotnet build Concord.RimWorld.slnx -c Release --nologo -p:GameVersion=1.7 "-p:GameManagedDir=${{ steps.refs-17.outputs.managed-dir }}"
-
-      - name: Package the mod
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/pkg/Concord
-          rsync -a --exclude-from=.steamignore ./ /tmp/pkg/Concord/
-          (cd /tmp/pkg && zip -qr "$GITHUB_WORKSPACE/Concord.zip" Concord)
-          unzip -l "$GITHUB_WORKSPACE/Concord.zip"
-
-      - name: Install semantic-release
-        run: npm install --no-save semantic-release@24 conventional-changelog-conventionalcommits@9 semantic-release-steam@2
-
-      - name: Set up SteamCMD
-        uses: buildalon/setup-steamcmd@2a16e8f482192d9a5710a17f0119890ceb1f48a1 # v1
-
-      - name: Restore Steam config
-        env:
-          STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
-        run: |
-          mkdir -p "$STEAM_DIR/config"
-          printf '%s' "$STEAM_CONFIG_VDF_B64" | base64 -d > "$STEAM_DIR/config/config.vdf"
-          echo "STEAM_CONFIG_VDF=$STEAM_DIR/config/config.vdf" >> "$GITHUB_ENV"
-
       - name: Record the tag before releasing
         id: before
         run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
@@ -178,17 +133,48 @@ jobs:
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
-          STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
-          STEAM_CONFIG_VDF: ${{ env.STEAM_CONFIG_VDF }}
-          STEAMCMD_PATH: ${{ env.STEAM_CMD }}/steamcmd.sh
-        run: npx -y -p semantic-release@24 -p conventional-changelog-conventionalcommits@9 -p semantic-release-steam@2 semantic-release
+          SPLIT_PUBLISH: '1'
+          GAME_MANAGED_1_5: ${{ steps.refs-15.outputs.managed-dir }}
+          GAME_MANAGED_1_6: ${{ steps.refs-16.outputs.managed-dir }}
+          GAME_MANAGED_1_7: ${{ steps.refs-17.outputs.managed-dir }}
+        run: ./node_modules/.bin/semantic-release
 
-      - uses: RimWorks/mod-ci/.github/actions/discord-release@v4
+      - name: Read the tag it just cut
+        id: after
+        run: |
+          tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ "$tag" = "${{ steps.before.outputs.tag }}" ] || [ -z "$tag" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload the release zips
+        if: steps.after.outputs.published == 'true'
+        uses: actions/upload-artifact@v7
         with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          mod-name: Concord
-          role-ids: ${{ vars.DISCORD_ROLE_IDS }}
-          workshop-id: '3758333473'
-          embed-color: 9B59B6
-          previous-tag: ${{ steps.before.outputs.tag }}
+          name: release-zips
+          path: dist/Concord-*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: RimWorks/mod-ci/.github/workflows/publish.yml@v4
+    permissions:
+      contents: read
+    secrets:
+      STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
+      STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+      STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    with:
+      version: ${{ needs.release.outputs.version }}
+      zip-artifact: release-zips
+      discord-mod-name: Concord
+      discord-workshop-id: '3758333473'
+      discord-embed-color: 9B59B6
+      tag: ${{ needs.release.outputs.tag }}
+      previous-tag: ${{ needs.release.outputs.previous-tag }}

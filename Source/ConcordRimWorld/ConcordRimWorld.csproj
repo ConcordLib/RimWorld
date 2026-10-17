@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <ConcordVersion Condition="'$(ConcordVersion)' == ''">0.23.0</ConcordVersion>
     <AssemblyName>ConcordRimWorld</AssemblyName>
     <RootNamespace>Concord.RimWorld</RootNamespace>
     <OutputPath>../../$(GameVersion)/Assemblies</OutputPath>
@@ -38,13 +37,13 @@
     <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
     <!-- The API surface the patches compile against. Keep in step with the Core checkout that
          StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
-    <PackageReference Include="Concord.Ref" Version="0.26.0" PrivateAssets="all" />
+    <PackageReference Include="Concord.Ref" Version="$(ConcordVersion)" PrivateAssets="all" />
     <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
          compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
          RimWorld does not scan <version>/Bridge for mod assemblies. -->
-    <PackageReference Include="Concord.Harmony" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" />
-    <PackageReference Include="Concord.Runtime" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" />
-    <PackageReference Include="Concord.Host.Adapter" Version="0.26.0" GeneratePathProperty="true" ExcludeAssets="all" Condition="'$(GameTfm)' == 'net10.0'" />
+    <PackageReference Include="Concord.Harmony" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Runtime" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" />
+    <PackageReference Include="Concord.Host.Adapter" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" Condition="'$(GameTfm)' == 'net10.0'" />
   </ItemGroup>
 
   <Target Name="StagePinnedConcord" AfterTargets="Build" Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">
