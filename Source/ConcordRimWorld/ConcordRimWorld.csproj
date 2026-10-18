@@ -6,7 +6,7 @@
     <OutputPath>../../$(GameVersion)/Assemblies</OutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <MinVerTagPrefix>v</MinVerTagPrefix>
-    <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
+    <ConcordCoreDir Condition="'$(ConcordCoreDir)' == ''">$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
     <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
     <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
     <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0'">$(PkgConcord_Host_Adapter)/lib/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
