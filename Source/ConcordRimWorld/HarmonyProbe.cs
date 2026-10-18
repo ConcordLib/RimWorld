@@ -14,13 +14,21 @@ public static class HarmonyProbe {
   internal const string VersionDir = "1.6";
 #elif RW_1_5
   internal const string VersionDir = "1.5";
+#elif RW_1_4
+  internal const string VersionDir = "1.4";
+#elif RW_1_3
+  internal const string VersionDir = "1.3";
+#elif RW_1_2
+  internal const string VersionDir = "1.2";
+#elif RW_1_1
+  internal const string VersionDir = "1.1";
 #else
 #error GameVersion has no VersionDir
 #endif
 
   internal const string BridgeFileName = "Concord.Harmony.dll";
 
-  internal static readonly Version supportedFrom = new Version(3, 0, 0);
+  internal static readonly Version supportedFrom = new Version(2, 2, 2);
   internal static readonly Version supportedBefore = new Version(4, 0, 0);
 
   // Assembly.GetName() computes CodeBase, and mono asserts on that for a byte-loaded assembly.
