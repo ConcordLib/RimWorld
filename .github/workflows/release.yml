@@ -105,6 +105,34 @@ jobs:
       - name: Install release dependencies
         run: npm ci --ignore-scripts
 
+      - name: Stage RimWorld 1.1 refs
+        id: refs-11
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.1'] }}
+          dest: ${{ runner.temp }}/game-1.1
+
+      - name: Stage RimWorld 1.2 refs
+        id: refs-12
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.2'] }}
+          dest: ${{ runner.temp }}/game-1.2
+
+      - name: Stage RimWorld 1.3 refs
+        id: refs-13
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.3'] }}
+          dest: ${{ runner.temp }}/game-1.3
+
+      - name: Stage RimWorld 1.4 refs
+        id: refs-14
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.4'] }}
+          dest: ${{ runner.temp }}/game-1.4
+
       - name: Stage RimWorld 1.5 refs
         id: refs-15
         uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
@@ -134,6 +162,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPLIT_PUBLISH: '1'
+          GAME_MANAGED_1_1: ${{ steps.refs-11.outputs.managed-dir }}
+          GAME_MANAGED_1_2: ${{ steps.refs-12.outputs.managed-dir }}
+          GAME_MANAGED_1_3: ${{ steps.refs-13.outputs.managed-dir }}
+          GAME_MANAGED_1_4: ${{ steps.refs-14.outputs.managed-dir }}
           GAME_MANAGED_1_5: ${{ steps.refs-15.outputs.managed-dir }}
           GAME_MANAGED_1_6: ${{ steps.refs-16.outputs.managed-dir }}
           GAME_MANAGED_1_7: ${{ steps.refs-17.outputs.managed-dir }}
