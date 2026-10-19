@@ -48,6 +48,8 @@ public static class RimWorldAdapter {
 
     wired = true;
 
+    Patcher.UseLog(context.Log);
+
     int forgotten = ResolveCache.ForgetReflectionOnly();
     if (forgotten > 0) {
       context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
