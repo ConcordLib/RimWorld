@@ -3,9 +3,14 @@
   <PropertyGroup>
     <AssemblyName>ConcordRimWorldTestMod</AssemblyName>
     <RootNamespace>Concord.RimWorld.TestMod</RootNamespace>
-    <OutputPath>../../TestMod/Assemblies</OutputPath>
+    <OutputPath>../../TestMod/$(GameVersion)/Assemblies</OutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <Target Name="StageTestModAbout" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)About/About.xml" DestinationFolder="$(MSBuildThisFileDirectory)../../TestMod/About" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)loadFolders.xml" DestinationFolder="$(MSBuildThisFileDirectory)../../TestMod" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <Reference Include="Assembly-CSharp">

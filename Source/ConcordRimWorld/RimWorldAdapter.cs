@@ -25,7 +25,7 @@ public static class RimWorldAdapter {
       ModRootDir = content.RootDir,
       Schedule = LongEventHandler.ExecuteWhenFinished,
       LoadBridge = HarmonyProbe.TryLoadBridge,
-      Log = Log.Warning,
+      Log = message => Log.Warning(message),
       DialogOnce = text => Find.WindowStack.Add(new Dialog_MessageBox(text)),
       ApplyEagerTier = () => {
         PropertyRegistry registry = new PropertyRegistry();
@@ -33,7 +33,7 @@ public static class RimWorldAdapter {
         RimWorldPatchApplier patchApplier = new RimWorldPatchApplier();
 
         RimWorldAttachedPropertyRegistry propertyRegistry = new RimWorldAttachedPropertyRegistry(registry);
-        PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, Log.Error);
+        PatchDeclarationScanner.ScanAssembly(typeof(RimWorldAdapter).Assembly, patchApplier, propertyRegistry, message => Log.Error(message));
         Patcher.UseAttachedPropertyRegistry(propertyRegistry);
       }
     };
@@ -47,6 +47,8 @@ public static class RimWorldAdapter {
     }
 
     wired = true;
+
+    Patcher.UseLog(context.Log);
 
     int forgotten = ResolveCache.ForgetReflectionOnly();
     if (forgotten > 0) {

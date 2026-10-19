@@ -7,17 +7,19 @@
     <GamecrateCache Condition="'$(GamecrateCache)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.cache'))</GamecrateCache>
     <GamecrateRefs Condition="'$(GamecrateRefs)' == '' And '$(GameManagedDir)' != ''">$(GameManagedDir)</GamecrateRefs>
     <GamecrateRefs Condition="'$(GamecrateRefs)' == ''">$([System.IO.Path]::Combine($(GamecrateCache), 'gamecrate', 'refs', 'version', 'rimworld', $(GameVersion)))</GamecrateRefs>
-    <!-- 1.7 runs WaylithCLR at net10.0; 1.5 and 1.6 run Unity's mono at net472 -->
+    <!-- 1.7 runs WaylithCLR at net10.0; every other version runs Unity's mono at net472 -->
     <GameTfm Condition="'$(GameVersion)' == '1.7'">net10.0</GameTfm>
     <GameTfm Condition="'$(GameTfm)' == ''">net472</GameTfm>
-    <HasGameRefs>false</HasGameRefs>
-    <HasGameRefs Condition="Exists('$(GamecrateRefs)/Assembly-CSharp.dll')">true</HasGameRefs>
     <TargetFramework>$(GameTfm)</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DefineConstants>$(DefineConstants);RW_$(GameVersion.Replace('.','_'))</DefineConstants>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.1'">version-1.1</GameSteamBranch>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.2'">version-1.2</GameSteamBranch>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.3'">version-1.3-latest</GameSteamBranch>
+    <GameSteamBranch Condition="'$(GameVersion)' == '1.4'">version-1.4.3901</GameSteamBranch>
     <GameSteamBranch Condition="'$(GameVersion)' == '1.5'">version-1.5</GameSteamBranch>
     <GameSteamBranch Condition="'$(GameVersion)' == '1.6'">public</GameSteamBranch>
     <GameSteamBranch Condition="'$(GameVersion)' == '1.7'">unstable</GameSteamBranch>
@@ -25,7 +27,16 @@
   <ItemGroup Condition="'$(GameTfm)' == 'net472'">
     <PackageReference Include="IsExternalInit" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
-  <Target Name="RequireGameRefs" BeforeTargets="ResolveAssemblyReferences" Condition="'$(HasGameRefs)' != 'true'">
-    <Error Text="no rimworld $(GameVersion) assemblies at $(GamecrateRefs). run: gamecrate steam build --game rimworld --beta $(GameSteamBranch)" />
+  <!-- 1.7 ships the Unity API as one shim assembly; every other version ships it as per-module
+       assemblies. Mirrors the Reference Condition="Exists(...)" set in ConcordRimWorld.csproj. -->
+  <ItemGroup>
+    <RequiredGameRef Include="Assembly-CSharp.dll" />
+    <RequiredGameRef Include="UnityEngine.CoreModule.dll" Condition="'$(GameTfm)' != 'net10.0'" />
+    <RequiredGameRef Include="UnityEngine.IMGUIModule.dll" Condition="'$(GameTfm)' != 'net10.0'" />
+    <RequiredGameRef Include="UnityStubs.dll" Condition="'$(GameTfm)' == 'net10.0'" />
+  </ItemGroup>
+  <Target Name="RequireGameRefs" BeforeTargets="ResolveAssemblyReferences">
+    <Error Text="no rimworld $(GameVersion) assembly %(RequiredGameRef.Identity) at $(GamecrateRefs)/%(RequiredGameRef.Identity). run: gamecrate steam build --game rimworld --beta $(GameSteamBranch)"
+           Condition="!Exists('$(GamecrateRefs)/%(RequiredGameRef.Identity)')" />
   </Target>
 </Project>

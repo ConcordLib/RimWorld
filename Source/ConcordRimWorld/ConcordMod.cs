@@ -23,12 +23,16 @@ public class ConcordMod : Mod {
     try {
       CheckLoadOrder(content);
       ConcordSettings settings = GetSettings<ConcordSettings>();
-      DetourBackendLoader.TryInstall(content.RootDir, Log.Message, Log.Warning, DetourBackendLoader.ModAssemblyDirectories);
+      DetourBackendLoader.TryInstall(content.RootDir, WhenLogViewerExists, message => Log.Warning(message), DetourBackendLoader.ModAssemblyDirectories);
       RimWorldAdapter.Wire(content, settings);
       Log.Message("[Concord.RimWorld] Concord runtime wired.");
     } catch (Exception e) {
       Log.Error("[Concord.RimWorld] Failed to initialize Concord: " + e);
     }
+  }
+
+  private static void WhenLogViewerExists(string message) {
+    LongEventHandler.ExecuteWhenFinished(() => Log.Message(message));
   }
 
   private static bool ShippedConcordCannotLoad() {

@@ -6,7 +6,7 @@
     <OutputPath>../../$(GameVersion)/Assemblies</OutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <MinVerTagPrefix>v</MinVerTagPrefix>
-    <ConcordCoreDir>$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
+    <ConcordCoreDir Condition="'$(ConcordCoreDir)' == ''">$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
     <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
     <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
     <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0'">$(PkgConcord_Host_Adapter)/lib/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
@@ -47,16 +47,16 @@
   </ItemGroup>
 
   <Target Name="StagePinnedConcord" AfterTargets="Build" Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">
+    <Exec Command="stat -c%s &quot;$(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll&quot;" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="ConcordPinnedRuntimeSize" />
+    </Exec>
+    <Error Condition="$(ConcordPinnedRuntimeSize) &lt; 1000000" Text="Concord.dll from the Concord.Runtime package at $(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll is only $(ConcordPinnedRuntimeSize) bytes; expected the ILRepack-merged runtime at roughly 2.8MB (&gt;= 1000000 bytes)." />
     <Copy SourceFiles="$(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll" DestinationFiles="$(ModVersionDir)/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(PkgConcord_Harmony)/lib/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="StageConcordRuntime" AfterTargets="Build" Condition="Exists('$(ConcordCoreDir)/Concord.slnx')">
-    <Exec Command="dotnet build &quot;$(ConcordCoreDir)/Concord.slnx&quot; -c Release --verbosity quiet" />
-    <Error Condition="!Exists('$(ConcordCoreDir)/Assemblies/$(GameTfm)/Concord.dll')" Text="Core built but produced no Assemblies/$(GameTfm)/Concord.dll at $(ConcordCoreDir)." />
-    <Error Condition="!Exists('$(ConcordCoreDir)/src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll')" Text="Core built but produced no src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll at $(ConcordCoreDir)." />
-    <Copy SourceFiles="$(ConcordCoreDir)/Assemblies/$(GameTfm)/Concord.dll" DestinationFiles="$(ModVersionDir)/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ConcordCoreDir)/src/Concord.Harmony/bin/Release/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)../stage-concord-runtime.sh&quot; &quot;$(ConcordCoreDir)&quot; &quot;$(GameTfm)&quot; &quot;$(ModVersionDir)&quot;" />
   </Target>
 
   <!-- Probed at runtime, so it stays out of <version>/Assemblies, which the game reflects over

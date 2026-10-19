@@ -35,14 +35,53 @@ jobs:
           embed-color: 9B59B6
           release-tag: ${{ github.event.inputs.announce-tag }}
 
+  wait-for-core:
+    if: github.event.inputs.announce-tag == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      concord-version: ${{ steps.wait.outputs.concord-version }}
+    steps:
+      - name: Wait for the Core packages on nuget.org
+        id: wait
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" != 'repository_dispatch' ]]; then
+            echo "concord-version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PACKAGE_VERSION="${CORE_VERSION#v}"
+          test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
+
+          for package in concord.ref concord.runtime concord.harmony concord.host.adapter; do
+            for attempt in $(seq 1 40); do
+              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
+                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
+                break
+              fi
+              test "$attempt" -lt 40 || { echo "::error::$package $PACKAGE_VERSION never appeared on nuget.org"; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
+              sleep 30
+            done
+          done
+
+          echo "concord-version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
   ci:
     if: github.event.inputs.announce-tag == ''
+    needs: wait-for-core
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
       checks: write
       packages: write
     secrets: inherit
+    with:
+      concord-version: ${{ needs.wait-for-core.outputs.concord-version }}
 
   release:
     name: semantic-release
@@ -81,29 +120,36 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for the Core packages on nuget.org
-        if: github.event_name == 'repository_dispatch'
-        env:
-          CORE_VERSION: ${{ github.event.client_payload.core_version }}
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION="${CORE_VERSION#v}"
-          test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
-
-          for package in concord.ref concord.runtime concord.harmony concord.host.adapter; do
-            for attempt in $(seq 1 40); do
-              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
-                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
-                break
-              fi
-              test "$attempt" -lt 40 || { echo "::error::$package $PACKAGE_VERSION never appeared on nuget.org"; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
-              sleep 30
-            done
-          done
-
       - name: Install release dependencies
         run: npm ci --ignore-scripts
+
+      - name: Stage RimWorld 1.1 refs
+        id: refs-11
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.1'] }}
+          dest: ${{ runner.temp }}/game-1.1
+
+      - name: Stage RimWorld 1.2 refs
+        id: refs-12
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.2'] }}
+          dest: ${{ runner.temp }}/game-1.2
+
+      - name: Stage RimWorld 1.3 refs
+        id: refs-13
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.3'] }}
+          dest: ${{ runner.temp }}/game-1.3
+
+      - name: Stage RimWorld 1.4 refs
+        id: refs-14
+        uses: RimWorks/mod-ci/.github/actions/stage-game-refs@v4
+        with:
+          image: ${{ fromJSON(needs.ci.outputs.image-refs)['1.4'] }}
+          dest: ${{ runner.temp }}/game-1.4
 
       - name: Stage RimWorld 1.5 refs
         id: refs-15
@@ -134,6 +180,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPLIT_PUBLISH: '1'
+          GAME_MANAGED_1_1: ${{ steps.refs-11.outputs.managed-dir }}
+          GAME_MANAGED_1_2: ${{ steps.refs-12.outputs.managed-dir }}
+          GAME_MANAGED_1_3: ${{ steps.refs-13.outputs.managed-dir }}
+          GAME_MANAGED_1_4: ${{ steps.refs-14.outputs.managed-dir }}
           GAME_MANAGED_1_5: ${{ steps.refs-15.outputs.managed-dir }}
           GAME_MANAGED_1_6: ${{ steps.refs-16.outputs.managed-dir }}
           GAME_MANAGED_1_7: ${{ steps.refs-17.outputs.managed-dir }}
@@ -146,9 +196,11 @@ jobs:
           if [ "$tag" = "${{ steps.before.outputs.tag }}" ] || [ -z "$tag" ]; then
             echo "published=false" >> "$GITHUB_OUTPUT"
           else
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            {
+              echo "published=true"
+              echo "tag=$tag"
+              echo "version=${tag#v}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload the release zips

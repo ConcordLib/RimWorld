@@ -164,12 +164,14 @@ public class HarmonyProbeTests {
   }
 
   [Theory]
-  [InlineData(2, 4, 1, false)]
-  [InlineData(2, 4, 9, false)]
-  [InlineData(2, 5, 0, false)]
+  [InlineData(2, 1, 0, false)]
+  [InlineData(2, 2, 2, true)]
+  [InlineData(2, 3, 3, true)]
+  [InlineData(2, 4, 3, true)]
   [InlineData(3, 0, 0, true)]
   [InlineData(3, 9, 9, true)]
   [InlineData(4, 0, 0, false)]
+  [InlineData(4, 1, 0, false)]
   public void VersionSupported_GatesTheRangeTheBridgeWasBuiltAgainst(int major, int minor, int build, bool supported) {
     string logOutput = null;
 
