@@ -11,7 +11,7 @@ mkdir -p "$lock_dir"
 exec 9>"$lock_dir/$(printf '%s' "$(cd "$core_dir" && pwd -P)" | md5sum | cut -d' ' -f1).lock"
 flock 9
 
-dotnet build "$core_dir/Concord.slnx" -c Release --verbosity quiet
+dotnet build "$core_dir/Concord.slnx" -c Release --verbosity quiet 9>&-
 
 core_dll="$core_dir/Assemblies/$tfm/Concord.dll"
 harmony_dll="$core_dir/src/Concord.Harmony/bin/Release/$tfm/Concord.Harmony.dll"
