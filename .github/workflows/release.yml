@@ -35,14 +35,53 @@ jobs:
           embed-color: 9B59B6
           release-tag: ${{ github.event.inputs.announce-tag }}
 
+  wait-for-core:
+    if: github.event.inputs.announce-tag == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      concord-version: ${{ steps.wait.outputs.concord-version }}
+    steps:
+      - name: Wait for the Core packages on nuget.org
+        id: wait
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" != 'repository_dispatch' ]]; then
+            echo "concord-version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PACKAGE_VERSION="${CORE_VERSION#v}"
+          test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
+
+          for package in concord.ref concord.runtime concord.harmony concord.host.adapter; do
+            for attempt in $(seq 1 40); do
+              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
+                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
+                break
+              fi
+              test "$attempt" -lt 40 || { echo "::error::$package $PACKAGE_VERSION never appeared on nuget.org"; exit 1; }
+              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
+              sleep 30
+            done
+          done
+
+          echo "concord-version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
   ci:
     if: github.event.inputs.announce-tag == ''
+    needs: wait-for-core
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
       checks: write
       packages: write
     secrets: inherit
+    with:
+      concord-version: ${{ needs.wait-for-core.outputs.concord-version }}
 
   release:
     name: semantic-release
@@ -80,27 +119,6 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Wait for the Core packages on nuget.org
-        if: github.event_name == 'repository_dispatch'
-        env:
-          CORE_VERSION: ${{ github.event.client_payload.core_version }}
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION="${CORE_VERSION#v}"
-          test -n "$PACKAGE_VERSION" || { echo "::error::core-released did not provide a version"; exit 1; }
-
-          for package in concord.ref concord.runtime concord.harmony concord.host.adapter; do
-            for attempt in $(seq 1 40); do
-              if curl -sS "https://api.nuget.org/v3-flatcontainer/$package/index.json" \
-                | jq -e --arg v "$PACKAGE_VERSION" '.versions | index($v) != null' >/dev/null 2>&1; then
-                break
-              fi
-              test "$attempt" -lt 40 || { echo "::error::$package $PACKAGE_VERSION never appeared on nuget.org"; exit 1; }
-              echo "$package $PACKAGE_VERSION is not on nuget.org yet; retrying in 30s ($attempt/40)"
-              sleep 30
-            done
-          done
 
       - name: Install release dependencies
         run: npm ci --ignore-scripts
@@ -178,9 +196,11 @@ jobs:
           if [ "$tag" = "${{ steps.before.outputs.tag }}" ] || [ -z "$tag" ]; then
             echo "published=false" >> "$GITHUB_OUTPUT"
           else
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            {
+              echo "published=true"
+              echo "tag=$tag"
+              echo "version=${tag#v}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload the release zips

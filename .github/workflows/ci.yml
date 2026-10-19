@@ -2,6 +2,11 @@ name: ci
 
 on:
   workflow_call:
+    inputs:
+      concord-version:
+        description: pin every leg to this Concord package version instead of the floating default
+        type: string
+        default: ''
     outputs:
       image-refs:
         description: JSON map of game version to the image that version compiled against
@@ -58,6 +63,8 @@ jobs:
     name: test ${{ matrix.version }}
     needs: images
     runs-on: ubuntu-latest
+    env:
+      ConcordVersion: ${{ inputs.concord-version }}
     permissions:
       contents: read
       packages: read
