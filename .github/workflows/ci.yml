@@ -41,6 +41,7 @@ jobs:
     secrets:
       STEAM_USERNAME: ${{ vars.STEAM_USERNAME }}
       STEAM_CONFIG_VDF_B64: ${{ secrets.STEAM_CONFIG_VDF_B64 }}
+      DEPOTDOWNLOADER_ACCOUNT_B64: ${{ secrets.DEPOTDOWNLOADER_ACCOUNT_B64 }}
 
   build:
     name: build
