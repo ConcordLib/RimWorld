@@ -8,6 +8,10 @@ const WORKSHOP_ID = process.env.WORKSHOP_ID || '3758333473';
 export default releaseConfig({
   solution: 'Concord.RimWorld.slnx',
   versions: declaredVersions(readFileSync('loadFolders.xml', 'utf8')),
-  mods: [{ name: 'Concord', workshopId: WORKSHOP_ID }],
+  mods: [{
+    name: 'Concord',
+    title: 'Concord: patching library',
+    workshopId: WORKSHOP_ID,
+  }],
   assets: [{ path: 'dist/Concord-*.zip', label: 'Concord mod' }],
 });
