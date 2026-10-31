@@ -10,7 +10,7 @@ export default releaseConfig({
   versions: declaredVersions(readFileSync('loadFolders.xml', 'utf8')),
   mods: [{
     name: 'Concord',
-    title: 'Concord: runtime patching library for RimWorld mods',
+    title: 'Concord: patching library',
     workshopId: WORKSHOP_ID,
   }],
   assets: [{ path: 'dist/Concord-*.zip', label: 'Concord mod' }],
