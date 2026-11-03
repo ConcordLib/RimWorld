@@ -176,6 +176,36 @@ jobs:
         id: before
         run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
+      - name: Generate a push token for the core release commit
+        if: github.event_name == 'repository_dispatch'
+        id: apptoken
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ vars.RUNTIME_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.RUNTIME_DISPATCH_APP_PRIVATE_KEY }}
+          owner: ConcordLib
+          repositories: RimWorld
+
+      - name: Commit the core release, same type as core
+        if: github.event_name == 'repository_dispatch'
+        env:
+          CORE_VERSION: ${{ github.event.client_payload.core_version }}
+          CORE_RELEASE_TYPE: ${{ github.event.client_payload.release_type }}
+          PUSH_TOKEN: ${{ steps.apptoken.outputs.token }}
+        run: |
+          set -euo pipefail
+          version="${CORE_VERSION#v}"
+          case "$CORE_RELEASE_TYPE" in
+            major) subject="feat(core)!: take concord $version" ;;
+            minor) subject="feat(core): take concord $version" ;;
+            *)     subject="fix(core): take concord $version" ;;
+          esac
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "$subject" -m "[skip ci]"
+          git push "https://x-access-token:$PUSH_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:main
+          echo "$subject"
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
