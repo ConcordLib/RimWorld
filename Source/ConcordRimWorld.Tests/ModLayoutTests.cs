@@ -1,8 +1,6 @@
 using System;
 using System.IO;
-#if RW_1_7
 using System.Reflection;
-#endif
 using Xunit;
 
 namespace Concord.RimWorld.Tests;
@@ -17,15 +15,21 @@ public class ModLayoutTests {
   public void The_Version_This_Build_Targets_Is_A_Supported_Version() {
     string about = File.ReadAllText(Path.Combine(ModRoot(), "About", "About.xml"));
 
-    Assert.Contains("<li>" + HarmonyProbe.VersionDir + "</li>", about);
+    Assert.Contains("<li>" + ModLayout.VersionDir + "</li>", about);
   }
 
-#if RW_1_7
   [Fact]
   public void Staged_Backend_Directory_Has_The_Body_Replacement_Backend() {
     string staged = Path.Combine(ModRoot(), "1.7", "Backend", DetourBackendLoader.BackendFileName);
 
     Assert.True(File.Exists(staged));
+  }
+
+  [Fact]
+  public void Staged_Backend_Has_The_Install_Entry_Point_The_Loader_Looks_Up() {
+    string staged = Path.Combine(ModRoot(), "1.7", "Backend", DetourBackendLoader.BackendFileName);
+
+    Assert.NotNull(DetourBackendLoader.FindInstall(Assembly.LoadFrom(staged)));
   }
 
   [Fact]
@@ -40,9 +44,8 @@ public class ModLayoutTests {
       }
     }
 
-    Assert.Equal(HarmonyProbe.BuildSha(typeof(Patcher).Assembly), stamped);
+    Assert.Equal(ModLayout.BuildSha(typeof(Patcher).Assembly), stamped);
   }
-#endif
 
   private static string ModRoot() {
     string current = AppContext.BaseDirectory;

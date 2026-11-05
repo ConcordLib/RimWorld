@@ -1,8 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Threading;
-using Concord.Detour;
 using Concord.Emit;
 using Concord.Orchestration;
 using Verse;
@@ -11,22 +7,17 @@ namespace Concord.RimWorld;
 
 public static class RimWorldAdapter {
   private static bool wired;
-  private static volatile IForeignPatchHost activeBridge;
-  private static Func<MethodBase, IReadOnlyList<string>> reflectionLookup;
-  private static AssemblyLoadEventHandler lateActivationHandler;
-  private static int lateActivationAttempted;
-  private static IDetourBackend backendBeforeWire;
 
   public static bool Ready { get; private set; }
 
-  public static void Wire(ModContentPack content, ConcordSettings settings) {
+  public static void Wire(ModContentPack content) {
     WireContext context = new WireContext {
-      Settings = settings,
-      ModRootDir = content.RootDir,
-      Schedule = LongEventHandler.ExecuteWhenFinished,
-      LoadBridge = HarmonyProbe.TryLoadBridge,
+      InstallBackend = () => DetourBackendLoader.TryInstall(
+          content.RootDir,
+          message => LongEventHandler.ExecuteWhenFinished(() => Log.Message(message)),
+          message => Log.Error(message),
+          DetourBackendLoader.ModAssemblyDirectories),
       Log = message => Log.Warning(message),
-      DialogOnce = text => Find.WindowStack.Add(new Dialog_MessageBox(text)),
       ApplyEagerTier = () => {
         PropertyRegistry registry = new PropertyRegistry();
         RimWorldRuntime.Registry = registry;
@@ -50,141 +41,27 @@ public static class RimWorldAdapter {
 
     Patcher.UseLog(context.Log);
 
-    int forgotten = ResolveCache.ForgetReflectionOnly();
-    if (forgotten > 0) {
-      context.Log("[Concord.RimWorld] Dropped " + forgotten + " cached lookups into reflection-only assemblies left by an assembly reload.");
+    if (!context.InstallBackend()) {
+      return;
     }
 
-    backendBeforeWire = DetourBackend.Current is RoutingDetourBackend leftover ? leftover.Inner : DetourBackend.Current;
-    RoutingDetourBackend router = new RoutingDetourBackend(backendBeforeWire, context.Log);
-    DetourBackend.Current = router;
-
     try {
-      WireRouted(context, router);
+      context.ApplyEagerTier();
       Ready = true;
     } catch {
-      DetourBackend.Current = backendBeforeWire;
-      backendBeforeWire = null;
       wired = false;
       throw;
-    }
-  }
-
-  private static void WireRouted(WireContext context, RoutingDetourBackend router) {
-    router.RouteEverything = context.Settings.RouteEverythingWhenHarmonyPresent;
-
-    context.ApplyEagerTier();
-
-    if (context.Settings.BridgeRoutingEnabled) {
-      ActivateBridgeOrWaitForHarmony(context, router);
-    }
-
-    ContentionWatcher watcher = new ContentionWatcher(
-        router.RawPinnedTargets,
-        router.ContestedLostTargets,
-        target => ForeignOwners(target, context),
-        () => router.NotifierInstalled,
-        context.Log,
-        context.DialogOnce);
-
-    // Patches now apply as they arrive, so there is no queue to drain. The watcher stays as a
-    // backstop for the case where the notifier hook could not install.
-    context.Schedule(() => {
-      watcher.RunCheckpoint();
-      context.Schedule(watcher.RunCheckpoint);
-    });
-  }
-
-  private static void ActivateBridgeOrWaitForHarmony(WireContext context, RoutingDetourBackend router) {
-    IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
-    if (bridge != null) {
-      activeBridge = bridge;
-      router.ActivateHost(bridge);
-      return;
-    }
-
-    lateActivationHandler = (sender, args) => OnAssemblyLoaded(context, args);
-    AppDomain.CurrentDomain.AssemblyLoad += lateActivationHandler;
-  }
-
-  private static void OnAssemblyLoaded(WireContext context, AssemblyLoadEventArgs args) {
-    if (activeBridge != null) {
-      if (lateActivationHandler != null) {
-        AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-        lateActivationHandler = null;
-      }
-
-      return;
-    }
-
-    if (HarmonyProbe.SimpleName(args.LoadedAssembly) != "0Harmony") {
-      return;
-    }
-
-    TryLateActivation(context);
-  }
-
-  private static IReadOnlyList<string> ForeignOwners(MethodBase target, WireContext context) {
-    IForeignPatchHost bridge = activeBridge;
-    if (bridge != null) {
-      return bridge.ForeignOwners(target);
-    }
-
-    reflectionLookup ??= ReflectionHarmonyObserver.TryCreateForeignOwnerLookup(() => AppDomain.CurrentDomain.GetAssemblies(), context.Log);
-    return reflectionLookup != null ? reflectionLookup(target) : Array.Empty<string>();
-  }
-
-  internal static void TryLateActivation(WireContext context) {
-    if (Interlocked.CompareExchange(ref lateActivationAttempted, 1, 0) != 0) {
-      return;
-    }
-
-    try {
-      IForeignPatchHost bridge = context.LoadBridge(context.ModRootDir, context.Log);
-      if (bridge == null) {
-        return;
-      }
-
-      activeBridge = bridge;
-
-      if (DetourBackend.Current is RoutingDetourBackend router) {
-        router.ActivateHost(bridge);
-      }
-    } finally {
-      if (lateActivationHandler != null) {
-        AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-        lateActivationHandler = null;
-      }
     }
   }
 
   internal static void ResetForTests() {
     wired = false;
     Ready = false;
-    activeBridge = null;
-    reflectionLookup = null;
-    lateActivationAttempted = 0;
-
-    if (lateActivationHandler != null) {
-      AppDomain.CurrentDomain.AssemblyLoad -= lateActivationHandler;
-      lateActivationHandler = null;
-    }
-
-    if (backendBeforeWire != null) {
-      DetourBackend.Current = backendBeforeWire;
-      backendBeforeWire = null;
-    }
   }
-
-  internal static bool HasLateActivationHandler => lateActivationHandler != null;
 }
 
 internal sealed class WireContext {
-  public ConcordSettings Settings;
-  public string ModRootDir;
-  public Action<Action> Schedule;
-  public Func<string, Action<string>, IForeignPatchHost> LoadBridge;
+  public Func<bool> InstallBackend;
   public Action<string> Log;
-  public Action<string> DialogOnce;
   public Action ApplyEagerTier;
 }

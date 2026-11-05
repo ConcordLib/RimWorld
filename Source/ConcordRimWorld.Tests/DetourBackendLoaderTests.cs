@@ -10,22 +10,20 @@ namespace Concord.RimWorld.Tests;
 [Collection(GameAssemblies.Name)]
 public class DetourBackendLoaderTests {
   public static Action<string> LastLog;
-  public static bool? LastFlag;
   public static string[] LastDirectories;
   public static int InstallCalls;
 
-  private static readonly string runtimeBuild = HarmonyProbe.BuildSha(typeof(Patcher).Assembly);
+  private static readonly string runtimeBuild = ModLayout.BuildSha(typeof(Patcher).Assembly);
 
   [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "xUnit1013", Justification = "Emitted fixture IL calls this across assemblies, so it has to stay public and is not a test.")]
-  public static void Record(Action<string> log, bool? enabled, string[] assemblyDirectories) {
+  public static void Record(Action<string> log, string[] assemblyDirectories) {
     InstallCalls++;
     LastLog = log;
-    LastFlag = enabled;
     LastDirectories = assemblyDirectories;
   }
 
   [Fact]
-  public void MissingBackendIsQuiet() {
+  public void MissingBackendWarnsThatConcordWillNotPatch() {
     string root = NewRoot();
     List<string> log = new List<string>();
     List<string> warnings = new List<string>();
@@ -33,12 +31,12 @@ public class DetourBackendLoaderTests {
     bool installed = DetourBackendLoader.TryInstall(root, log.Add, warnings.Add, () => []);
 
     Assert.False(installed);
-    Assert.Empty(log);
-    Assert.Empty(warnings);
+    Assert.Single(warnings);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
-  public void PresentBackendGetsLogSinkNullFlagAndAssemblyDirectories() {
+  public void PresentBackendGetsLogSinkAndAssemblyDirectories() {
     string root = NewRoot();
     WriteFixture(root, "Fixture.Backend.Good", Fixture.Installs, runtimeBuild);
     List<string> log = new List<string>();
@@ -46,7 +44,6 @@ public class DetourBackendLoaderTests {
     string[] directories = ["/one", "/two"];
     InstallCalls = 0;
     LastLog = null;
-    LastFlag = true;
     LastDirectories = null;
 
     bool installed = DetourBackendLoader.TryInstall(root, log.Add, warnings.Add, () => directories);
@@ -54,7 +51,6 @@ public class DetourBackendLoaderTests {
     Assert.True(installed);
     Assert.Empty(warnings);
     Assert.Equal(1, InstallCalls);
-    Assert.Null(LastFlag);
     Assert.Equal(directories, LastDirectories);
     Assert.NotNull(LastLog);
     LastLog("from the backend");
@@ -76,6 +72,7 @@ public class DetourBackendLoaderTests {
     Assert.True(reachedWiring);
     Assert.Single(warnings);
     Assert.Contains(BackendPath(root), warnings[0]);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
@@ -87,6 +84,7 @@ public class DetourBackendLoaderTests {
 
     Assert.False(installed);
     Assert.Single(warnings);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
@@ -101,6 +99,22 @@ public class DetourBackendLoaderTests {
     Assert.False(installed);
     Assert.Single(warnings);
     Assert.Contains("no matching entry point", warnings[0]);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
+  }
+
+  [Fact]
+  public void BackendThatRefusesThisRuntimeWarnsThatConcordWillNotPatch() {
+    string root = NewRoot();
+    WriteFixture(root, "Fixture.Backend.Refuses", Fixture.Refuses, runtimeBuild);
+    List<string> log = new List<string>();
+    List<string> warnings = new List<string>();
+
+    bool installed = DetourBackendLoader.TryInstall(root, log.Add, warnings.Add, () => []);
+
+    Assert.False(installed);
+    Assert.Single(warnings);
+    Assert.Contains("fixture backend refused this runtime", warnings[0]);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
@@ -118,6 +132,7 @@ public class DetourBackendLoaderTests {
     Assert.Single(warnings);
     Assert.Contains("0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", warnings[0]);
     Assert.Contains(runtimeBuild, warnings[0]);
+    Assert.Contains("will not patch", warnings[0], StringComparison.OrdinalIgnoreCase);
   }
 
   [Fact]
@@ -132,8 +147,9 @@ public class DetourBackendLoaderTests {
 
     Assert.True(installed);
     Assert.Equal(1, InstallCalls);
-    Assert.Single(warnings);
-    Assert.Contains(DetourBackendLoader.RuntimeBuildKey, warnings[0]);
+    Assert.Empty(warnings);
+    Assert.Single(log);
+    Assert.Contains(DetourBackendLoader.RuntimeBuildKey, log[0]);
   }
 
   [Fact]
@@ -153,15 +169,9 @@ public class DetourBackendLoaderTests {
 
   [Fact]
   public void AssemblyDirectoriesSkipsAssembliesWithNoFileOnDisk() {
-#if NETFRAMEWORK
-    Assembly inMemory = AppDomain.CurrentDomain.DefineDynamicAssembly(
-        new AssemblyName("Fixture.InMemory"),
-        AssemblyBuilderAccess.Run);
-#else
     Assembly inMemory = AssemblyBuilder.DefineDynamicAssembly(
         new AssemblyName("Fixture.InMemory"),
         AssemblyBuilderAccess.Run);
-#endif
 
     Assert.Empty(DetourBackendLoader.AssemblyDirectories(new Assembly[] { null, inMemory }));
   }
@@ -169,7 +179,7 @@ public class DetourBackendLoaderTests {
   private static string BackendPath(string modRoot) {
     return Path.Combine(
         modRoot,
-        HarmonyProbe.VersionDir,
+        ModLayout.VersionDir,
         "Backend",
         DetourBackendLoader.BackendFileName);
   }
@@ -182,6 +192,7 @@ public class DetourBackendLoaderTests {
 
   private enum Fixture {
     Installs,
+    Refuses,
     Throws,
     WrongSignature
   }
@@ -192,16 +203,9 @@ public class DetourBackendLoaderTests {
     string fileName = Path.GetFileName(path);
     Directory.CreateDirectory(dir);
 
-#if NETFRAMEWORK
-    AssemblyBuilder assembly = AppDomain.CurrentDomain.DefineDynamicAssembly(
-        new AssemblyName(assemblyName),
-        AssemblyBuilderAccess.Save,
-        dir);
-#else
     PersistedAssemblyBuilder assembly = new PersistedAssemblyBuilder(
         new AssemblyName(assemblyName),
         typeof(object).Assembly);
-#endif
 
     if (concordBuild != null) {
       assembly.SetCustomAttribute(new CustomAttributeBuilder(
@@ -209,21 +213,19 @@ public class DetourBackendLoaderTests {
           [DetourBackendLoader.RuntimeBuildKey, concordBuild]));
     }
 
-#if NETFRAMEWORK
-    ModuleBuilder module = assembly.DefineDynamicModule(fileName, fileName);
-#else
     ModuleBuilder module = assembly.DefineDynamicModule(fileName);
-#endif
+    ConstructorInfo selectionCtor = DefineFixtureSelection(module);
+
     TypeBuilder type = module.DefineType(
         "Concord.Host.Adapter.AdapterEntryPoint",
         TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed);
     MethodBuilder install = type.DefineMethod(
         "Install",
         MethodAttributes.Public | MethodAttributes.Static,
-        typeof(void),
+        kind == Fixture.WrongSignature ? typeof(void) : typeof(object),
         kind == Fixture.WrongSignature
             ? []
-            : [typeof(Action<string>), typeof(bool?), typeof(string[])]);
+            : [typeof(Action<string>), typeof(string[])]);
     ILGenerator il = install.GetILGenerator();
 
     if (kind == Fixture.Throws) {
@@ -235,17 +237,53 @@ public class DetourBackendLoaderTests {
     } else {
       il.Emit(OpCodes.Ldarg_0);
       il.Emit(OpCodes.Ldarg_1);
-      il.Emit(OpCodes.Ldarg_2);
       il.Emit(OpCodes.Call, typeof(DetourBackendLoaderTests).GetMethod(nameof(Record)));
+      il.Emit(kind == Fixture.Refuses ? OpCodes.Ldc_I4_0 : OpCodes.Ldc_I4_1);
+      il.Emit(OpCodes.Ldstr, kind == Fixture.Refuses ? "fixture backend refused this runtime" : "fixture backend installed");
+      il.Emit(OpCodes.Newobj, selectionCtor);
       il.Emit(OpCodes.Ret);
     }
 
     type.CreateType();
-    assembly.Save(
-#if NETFRAMEWORK
-        fileName);
-#else
-            path);
-#endif
+    assembly.Save(path);
+  }
+
+  private static ConstructorInfo DefineFixtureSelection(ModuleBuilder module) {
+    TypeBuilder selection = module.DefineType("Fixture.Selection", TypeAttributes.Public);
+    FieldBuilder waylith = selection.DefineField("waylith", typeof(bool), FieldAttributes.Private);
+    FieldBuilder message = selection.DefineField("message", typeof(string), FieldAttributes.Private);
+
+    ConstructorBuilder ctor = selection.DefineConstructor(
+        MethodAttributes.Public,
+        CallingConventions.Standard,
+        [typeof(bool), typeof(string)]);
+    ILGenerator ctorIl = ctor.GetILGenerator();
+    ctorIl.Emit(OpCodes.Ldarg_0);
+    ctorIl.Emit(OpCodes.Ldarg_1);
+    ctorIl.Emit(OpCodes.Stfld, waylith);
+    ctorIl.Emit(OpCodes.Ldarg_0);
+    ctorIl.Emit(OpCodes.Ldarg_2);
+    ctorIl.Emit(OpCodes.Stfld, message);
+    ctorIl.Emit(OpCodes.Ret);
+
+    DefineReadOnlyProperty(selection, "Waylith", typeof(bool), waylith);
+    DefineReadOnlyProperty(selection, "Message", typeof(string), message);
+
+    selection.CreateType();
+    return ctor;
+  }
+
+  private static void DefineReadOnlyProperty(TypeBuilder type, string name, Type propertyType, FieldBuilder backingField) {
+    PropertyBuilder property = type.DefineProperty(name, PropertyAttributes.None, propertyType, null);
+    MethodBuilder getter = type.DefineMethod(
+        "get_" + name,
+        MethodAttributes.Public | MethodAttributes.SpecialName,
+        propertyType,
+        null);
+    ILGenerator getterIl = getter.GetILGenerator();
+    getterIl.Emit(OpCodes.Ldarg_0);
+    getterIl.Emit(OpCodes.Ldfld, backingField);
+    getterIl.Emit(OpCodes.Ret);
+    property.SetGetMethod(getter);
   }
 }

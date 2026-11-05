@@ -14,57 +14,83 @@ internal static class DetourBackendLoader {
   internal static bool TryInstall(
       string modRootDir,
       Action<string> log,
-      Action<string> warn,
+      Action<string> error,
       Func<string[]> assemblyDirectories) {
     string backendPath = null;
 
     try {
       backendPath = Path.Combine(
           modRootDir,
-          HarmonyProbe.VersionDir,
+          ModLayout.VersionDir,
           "Backend",
           BackendFileName);
 
       if (!File.Exists(backendPath)) {
+        error(
+            "[Concord.RimWorld] Concord's patching backend is missing: no " + BackendFileName + " at " +
+            backendPath + ". It is the only backend there is, so Concord will not patch anything this " +
+            "session. Reinstall the mod.");
         return false;
       }
 
       Assembly backend = Assembly.LoadFrom(backendPath);
 
-      if (!PairedWithRuntime(backend, backendPath, warn)) {
+      if (!PairedWithRuntime(backend, backendPath, log, error)) {
         return false;
       }
 
-      Type entryPoint = backend.GetType("Concord.Host.Adapter.AdapterEntryPoint", true);
-      MethodInfo install = entryPoint.GetMethod(
-          "Install",
-          [typeof(Action<string>), typeof(bool?), typeof(string[])]);
+      MethodInfo install = FindInstall(backend);
 
       if (install == null) {
-        warn(
-            "[Concord.RimWorld] An optional detour backend ships at " + backendPath +
-            " but has no matching entry point, so Concord stays on its default backend.");
+        error(
+            "[Concord.RimWorld] Concord's patching backend at " + backendPath + " has no matching entry " +
+            "point, so Concord will not patch anything this session. Reinstall the mod.");
         return false;
       }
 
-      install.Invoke(null, [log, null, assemblyDirectories()]);
-      log("[Concord.RimWorld] An optional detour backend ships alongside this mod and is installed.");
+      object selection = install.Invoke(null, [log, assemblyDirectories()]);
+
+      if (!Installed(selection)) {
+        error(
+            "[Concord.RimWorld] Concord's patching backend at " + backendPath + " installed nothing on this " +
+            "runtime, so Concord will not patch anything this session: " + Read(selection, "Message"));
+        return false;
+      }
+
       return true;
     } catch (Exception e) {
-      warn(
-          "[Concord.RimWorld] An optional detour backend ships at " + (backendPath ?? modRootDir) +
-          " but could not be installed, so Concord stays on its default backend: " + e);
+      error(
+          "[Concord.RimWorld] Concord's patching backend at " + (backendPath ?? modRootDir) +
+          " could not be installed, so Concord will not patch anything this session: " + e);
       return false;
     }
   }
 
-  private static bool PairedWithRuntime(Assembly backend, string backendPath, Action<string> warn) {
-    string runtimeBuild = HarmonyProbe.BuildSha(typeof(Patcher).Assembly);
+  internal static MethodInfo FindInstall(Assembly backend) {
+    return backend
+        .GetType("Concord.Host.Adapter.AdapterEntryPoint", true)
+        .GetMethod("Install", [typeof(Action<string>), typeof(string[])]);
+  }
+
+  private static bool Installed(object selection) {
+    return selection != null && (bool)Read(selection, "Waylith");
+  }
+
+  private static object Read(object selection, string property) {
+    return selection?.GetType().GetProperty(property)?.GetValue(selection);
+  }
+
+  private static bool PairedWithRuntime(
+      Assembly backend,
+      string backendPath,
+      Action<string> log,
+      Action<string> error) {
+    string runtimeBuild = ModLayout.BuildSha(typeof(Patcher).Assembly);
     string backendBuild = DeclaredRuntimeBuild(backend);
 
     if (runtimeBuild == null || backendBuild == null) {
-      warn(
-          "[Concord.RimWorld] The optional detour backend at " + backendPath + " carries no " +
+      log(
+          "[Concord.RimWorld] Concord's patching backend at " + backendPath + " carries no " +
           RuntimeBuildKey + " stamp naming the Concord runtime build it was compiled against, so it " +
           "cannot be checked against the runtime loaded here. Installing it unchecked.");
       return true;
@@ -74,10 +100,10 @@ internal static class DetourBackendLoader {
       return true;
     }
 
-    warn(
-        "[Concord.RimWorld] The optional detour backend at " + backendPath + " was built against Concord " +
-        backendBuild + ", this game runs " + runtimeBuild + ". They ship as a pair. Reinstall both from one " +
-        "release; Concord stays on its default backend.");
+    error(
+        "[Concord.RimWorld] Concord's patching backend at " + backendPath + " was built against Concord " +
+        backendBuild + ", this game runs " + runtimeBuild + ". They ship as a pair, so Concord will not " +
+        "patch anything this session. Reinstall both from one release.");
     return false;
   }
 

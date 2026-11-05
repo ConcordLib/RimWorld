@@ -14,10 +14,8 @@ flock 9
 dotnet build "$core_dir/Concord.slnx" -c Release --verbosity quiet 9>&-
 
 core_dll="$core_dir/Assemblies/$tfm/Concord.dll"
-harmony_dll="$core_dir/src/Concord.Harmony/bin/Release/$tfm/Concord.Harmony.dll"
 
 [[ -f "$core_dll" ]] || { echo "Core built but produced no $core_dll" >&2; exit 1; }
-[[ -f "$harmony_dll" ]] || { echo "Core built but produced no $harmony_dll" >&2; exit 1; }
 
 size=$(stat -c%s "$core_dll")
 if (( size < min_bytes )); then
@@ -25,6 +23,5 @@ if (( size < min_bytes )); then
   exit 1
 fi
 
-mkdir -p "$dest_dir/Assemblies" "$dest_dir/Bridge"
+mkdir -p "$dest_dir/Assemblies"
 cp "$core_dll" "$dest_dir/Assemblies/0Concord.dll"
-cp "$harmony_dll" "$dest_dir/Bridge/Concord.Harmony.dll"

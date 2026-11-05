@@ -8,8 +8,8 @@
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <ConcordCoreDir Condition="'$(ConcordCoreDir)' == ''">$(MSBuildThisFileDirectory)../../../Core</ConcordCoreDir>
     <ModVersionDir>$(MSBuildThisFileDirectory)../../$(GameVersion)</ModVersionDir>
-    <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
-    <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND '$(GameTfm)' == 'net10.0'">$(PkgConcord_Host_Adapter)/lib/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
+    <DetourBackendSource Condition="'$(DetourBackendSource)' == '' AND Exists('$(ConcordCoreDir)/Concord.slnx')">$(ConcordCoreDir)/src/Concord.Host.Adapter/bin/Release/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
+    <DetourBackendSource Condition="'$(DetourBackendSource)' == ''">$(PkgConcord_Host_Adapter)/lib/net10.0/Concord.Host.Adapter.dll</DetourBackendSource>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,17 +17,7 @@
       <HintPath>$(GamecrateRefs)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="UnityEngine.CoreModule" Condition="Exists('$(GamecrateRefs)/UnityEngine.CoreModule.dll')">
-      <HintPath>$(GamecrateRefs)/UnityEngine.CoreModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <!-- GUI and GUIContent, which the main menu version readout draws through. -->
-    <Reference Include="UnityEngine.IMGUIModule" Condition="Exists('$(GamecrateRefs)/UnityEngine.IMGUIModule.dll')">
-      <HintPath>$(GamecrateRefs)/UnityEngine.IMGUIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <!-- 1.7 ships the Unity API as one shim assembly instead of per-module ones. -->
-    <Reference Include="UnityStubs" Condition="Exists('$(GamecrateRefs)/UnityStubs.dll')">
+    <Reference Include="UnityStubs">
       <HintPath>$(GamecrateRefs)/UnityStubs.dll</HintPath>
       <Private>false</Private>
     </Reference>
@@ -38,12 +28,8 @@
     <!-- The API surface the patches compile against. Keep in step with the Core checkout that
          StageConcordRuntime builds, or the mod compiles against types the runtime does not have. -->
     <PackageReference Include="Concord.Ref" Version="$(ConcordVersion)" PrivateAssets="all" />
-    <!-- Referenced only to stage the file. ConcordRimWorld never binds to Concord.Harmony at
-         compile time: it talks to IForeignPatchHost and side-loads the dll at runtime, because
-         RimWorld does not scan <version>/Bridge for mod assemblies. -->
-    <PackageReference Include="Concord.Harmony" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" />
     <PackageReference Include="Concord.Runtime" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" />
-    <PackageReference Include="Concord.Host.Adapter" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" Condition="'$(GameTfm)' == 'net10.0'" />
+    <PackageReference Include="Concord.Host.Adapter" Version="$(ConcordVersion)" GeneratePathProperty="true" ExcludeAssets="all" />
   </ItemGroup>
 
   <Target Name="StagePinnedConcord" AfterTargets="Build" Condition="!Exists('$(ConcordCoreDir)/Concord.slnx')">
@@ -52,7 +38,6 @@
     </Exec>
     <Error Condition="$(ConcordPinnedRuntimeSize) &lt; 1000000" Text="Concord.dll from the Concord.Runtime package at $(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll is only $(ConcordPinnedRuntimeSize) bytes; expected the ILRepack-merged runtime at roughly 2.8MB (&gt;= 1000000 bytes)." />
     <Copy SourceFiles="$(PkgConcord_Runtime)/lib/$(GameTfm)/Concord.dll" DestinationFiles="$(ModVersionDir)/Assemblies/0Concord.dll" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(PkgConcord_Harmony)/lib/$(GameTfm)/Concord.Harmony.dll" DestinationFolder="$(ModVersionDir)/Bridge" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="StageConcordRuntime" AfterTargets="Build" Condition="Exists('$(ConcordCoreDir)/Concord.slnx')">
@@ -61,7 +46,7 @@
 
   <!-- Probed at runtime, so it stays out of <version>/Assemblies, which the game reflects over
        before any mod constructor runs. Override the source with -p:DetourBackendSource=<path>. -->
-  <Target Name="StageDetourBackend" AfterTargets="Build" Condition="'$(GameTfm)' == 'net10.0'">
+  <Target Name="StageDetourBackend" AfterTargets="Build">
     <Error Condition="!Exists('$(DetourBackendSource)')" Text="The 1.7 build needs the body-replacement backend, and there is none at $(DetourBackendSource). Point -p:ConcordCoreDir at a Core checkout whose Concord.slnx builds src/Concord.Host.Adapter, or restore the Concord.Host.Adapter package, or pass -p:DetourBackendSource=&lt;path&gt;." />
     <Copy SourceFiles="$(DetourBackendSource)" DestinationFiles="$(ModVersionDir)/Backend/Concord.Host.Adapter.dll" SkipUnchangedFiles="true" />
   </Target>
